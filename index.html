@@ -596,6 +596,16 @@
        품목 관리
        ================================================================ */
 
+    .품목상단바 {
+
+      display: flex;
+      justify-content: flex-end;
+
+      gap: 10px;
+
+      margin-bottom: 14px;
+    }
+
     .품목툴바 {
 
       display: flex;
@@ -1957,6 +1967,25 @@
 
     return `
 
+      <div class="품목상단바">
+
+        <button
+          class="버튼 버튼주요"
+          onclick="품목_등록폼열기()"
+        >
+          품목 등록
+        </button>
+
+        <button
+          class="버튼 버튼보조"
+          onclick="품목_목록불러오기()"
+        >
+          새로고침
+        </button>
+
+      </div>
+
+
       <div class="품목툴바">
 
         <div class="필드">
@@ -1965,7 +1994,7 @@
             id="품목검색_품목명"
             type="text"
             placeholder="품목명 검색"
-            oninput="품목_검색()"
+            onkeydown="품목_검색_엔터(event)"
           >
         </div>
 
@@ -1975,36 +2004,31 @@
             id="품목검색_분류"
             type="text"
             placeholder="분류 검색"
-            oninput="품목_검색()"
+            onkeydown="품목_검색_엔터(event)"
           >
         </div>
 
         <div class="필드">
           <label>사용여부</label>
-          <select
-            id="품목검색_사용여부"
-            onchange="품목_검색()"
-          >
+          <select id="품목검색_사용여부">
             <option value="all">전체</option>
             <option value="use">사용</option>
             <option value="unuse">미사용</option>
           </select>
         </div>
 
-        <div class="툴바여백"></div>
-
         <button
-          class="버튼 버튼보조"
-          onclick="품목_목록불러오기()"
+          class="버튼 버튼주요"
+          onclick="품목_검색()"
         >
-          새로고침
+          검색
         </button>
 
         <button
-          class="버튼 버튼주요"
-          onclick="품목_등록폼열기()"
+          class="버튼 버튼보조"
+          onclick="품목_검색초기화()"
         >
-          품목 등록
+          초기화
         </button>
 
       </div>
@@ -2159,7 +2183,7 @@
           품목_원본목록 =
             Array.isArray(list) ? list : [];
 
-          품목_검색();
+          품목_테이블렌더(품목_원본목록);
 
         }
       )
@@ -2244,6 +2268,38 @@
 
 
     품목_테이블렌더(결과);
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 검색(엔터) / 초기화
+     ================================================================ */
+
+  function 품목_검색_엔터(event) {
+
+    if (event && event.key === 'Enter') {
+      품목_검색();
+    }
+
+  }
+
+
+  function 품목_검색초기화() {
+
+    const 이름 =
+      document.getElementById('품목검색_품목명');
+    if (이름) { 이름.value = ''; }
+
+    const 분류 =
+      document.getElementById('품목검색_분류');
+    if (분류) { 분류.value = ''; }
+
+    const 사용 =
+      document.getElementById('품목검색_사용여부');
+    if (사용) { 사용.value = 'all'; }
+
+    품목_테이블렌더(품목_원본목록);
 
   }
 
