@@ -2180,15 +2180,6 @@
       .withSuccessHandler(
         function(list) {
 
-          // [임시 진단] 서버에서 받은 값 화면 표시
-          품목_상태표시(
-            '[진단] 타입=' + (typeof list) +
-            ' / 배열=' + Array.isArray(list) +
-            ' / 건수=' + (list && list.length) +
-            ' / 원본=' + JSON.stringify(list).slice(0, 300),
-            '성공'
-          );
-
           품목_원본목록 =
             Array.isArray(list) ? list : [];
 
