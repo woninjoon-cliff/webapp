@@ -268,20 +268,35 @@ function ITEM_getList() {
     .map(function(row) {
 
       return {
-        품목ID: row[0],
-        품목명: row[1],
-        분류: row[2],
-        규격: row[3],
-        단위: row[4],
-        기본단가: row[5],
-        관리단위: row[6],
-        사용여부: row[7],
-        등록일시: row[8],
+        품목ID: String(row[0] || ''),
+        품목명: String(row[1] || ''),
+        분류: String(row[2] || ''),
+        규격: String(row[3] || ''),
+        단위: String(row[4] || ''),
+        기본단가: Number(row[5] || 0),
+        관리단위: String(row[6] || ''),
+        사용여부: row[7] === true ||
+                 String(row[7]).toLowerCase() !== 'false',
+
+        // Date 객체를 문자열로 변환
+        등록일시: row[8]
+          ? Utilities.formatDate(
+              new Date(row[8]),
+              Session.getScriptTimeZone(),
+              'yyyy-MM-dd HH:mm:ss'
+            )
+          : '',
+
         수정일시: row[9]
+          ? Utilities.formatDate(
+              new Date(row[9]),
+              Session.getScriptTimeZone(),
+              'yyyy-MM-dd HH:mm:ss'
+            )
+          : ''
       };
 
     });
-
 }
 
 
