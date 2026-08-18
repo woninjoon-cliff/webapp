@@ -244,7 +244,7 @@ function DB_초기화() {
 
 function ITEM_getList() {
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(DB_SPREADSHEET_ID);
   const sheet = ss.getSheetByName('03_품목');
 
   if (!sheet) {
@@ -295,7 +295,7 @@ function ITEM_save(data) {
     throw new Error('품목 데이터가 없습니다.');
   }
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById(DB_SPREADSHEET_ID);
   const sheet = ss.getSheetByName('03_품목');
 
   if (!sheet) {
@@ -555,7 +555,7 @@ function ITEM_save(data) {
 function ITEM_새ID생성_() {
 
   const ss =
-    SpreadsheetApp.getActiveSpreadsheet();
+    SpreadsheetApp.openById(DB_SPREADSHEET_ID);
 
   const sheet =
     ss.getSheetByName('03_품목');
@@ -632,7 +632,7 @@ function ITEM_delete(품목ID) {
 
 
   const ss =
-    SpreadsheetApp.getActiveSpreadsheet();
+    SpreadsheetApp.openById(DB_SPREADSHEET_ID);
 
   const sheet =
     ss.getSheetByName('03_품목');
