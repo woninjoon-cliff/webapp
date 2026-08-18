@@ -705,3 +705,62 @@ function ITEM_delete(품목ID) {
   return '품목이 삭제되었습니다.';
 
 }
+
+// =====================================================================
+// 품목 CRUD 통합 테스트 (등록→조회→수정→재조회→삭제)
+// =====================================================================
+
+function test_ITEM_전체흐름() {
+
+  const 테스트품목명 = '__테스트품목__' + new Date().getTime();
+
+  Logger.log('=== 품목 CRUD 테스트 시작 ===');
+
+  // 1) 등록
+  const 등록결과 = ITEM_save({
+    품목명: 테스트품목명,
+    분류: '테스트분류',
+    규격: '10ml',
+    단위: 'EA',
+    기본단가: 1000,
+    관리단위: 'BOX',
+    사용여부: true
+  });
+  Logger.log('1. 등록: ' + 등록결과);
+
+  // 2) 조회 + 품목ID 확보
+  let 목록 = ITEM_getList();
+  let 대상 = 목록.filter(function(x){ return x.품목명 === 테스트품목명; })[0];
+  if (!대상) { throw new Error('등록된 테스트 품목을 찾지 못했습니다.'); }
+  const 품목ID = 대상.품목ID;
+  Logger.log('2. 조회: 품목ID=' + 품목ID + ', 총 ' + 목록.length + '건');
+
+  // 3) 수정
+  const 수정결과 = ITEM_save({
+    품목ID: 품목ID,
+    품목명: 테스트품목명,
+    분류: '수정분류',
+    규격: '20ml',
+    단위: 'EA',
+    기본단가: 2000,
+    관리단위: 'BOX',
+    사용여부: false
+  });
+  Logger.log('3. 수정: ' + 수정결과);
+
+  // 4) 재조회
+  목록 = ITEM_getList();
+  대상 = 목록.filter(function(x){ return x.품목ID === 품목ID; })[0];
+  Logger.log('4. 재조회: 분류=' + 대상.분류 + ', 기본단가=' + 대상.기본단가 + ', 사용여부=' + 대상.사용여부);
+
+  // 5) 삭제
+  const 삭제결과 = ITEM_delete(품목ID);
+  Logger.log('5. 삭제: ' + 삭제결과);
+
+  // 6) 삭제 확인
+  목록 = ITEM_getList();
+  const 남음 = 목록.filter(function(x){ return x.품목ID === 품목ID; }).length;
+  Logger.log('6. 삭제 확인: 잔존 ' + 남음 + '건 (0이어야 정상)');
+
+  Logger.log('=== 품목 CRUD 테스트 종료 ===');
+}
