@@ -237,10 +237,10 @@
 
     .사이드바브랜드 .sub {
 
-      margin-top: 4px;
+      margin-top: 2px;
 
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 20px;
+      font-weight: 800;
 
       color: #8064d8;
     }
@@ -254,28 +254,21 @@
 
       margin: 16px 14px;
 
-      padding: 12px 13px;
+      padding: 10px 13px;
 
       border-radius: 10px;
 
       background: rgba(128, 100, 216, 0.08);
     }
 
-    .사이드바병원 .label {
-
-      margin-bottom: 5px;
-
-      font-size: 11px;
-
-      color: #8b849d;
-    }
-
     .사이드바병원 .name {
 
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
 
       color: #40385f;
+
+      text-align: center;
     }
 
 
@@ -436,6 +429,8 @@
 
     .사용자정보 .name {
 
+      display: inline;
+
       font-size: 13px;
       font-weight: 700;
 
@@ -444,7 +439,9 @@
 
     .사용자정보 .role {
 
-      margin-top: 3px;
+      display: inline;
+
+      margin-left: 6px;
 
       font-size: 11px;
 
@@ -958,8 +955,49 @@
 
       position: relative;
 
+      /* 리사이즈 핸들이 경계선을 넘어 좌우로 걸쳐지도록 overflow:visible */
+      overflow: visible;
+    }
+
+    /* 헤더 텍스트 자체는 안쪽 span에서 말줄임 처리
+       + 정렬 클릭 대상. 리사이즈 핸들과 별도라 상호간섭 없음. */
+    .품목표 thead th > .th_텍스트 {
+      display: block;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .품목표 thead th > .th_텍스트:hover {
+      color: #8064d8;
+    }
+
+    /* 정렬 방향 표시
+       - 기본(비활성): 회색 옅은 ⇅ 아이콘 (항상 표시, 정렬 가능 힌트)
+       - 활성 오름차순: 진한 보라 ▲
+       - 활성 내림차순: 진한 보라 ▼ */
+    .정렬표시 {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 10px;
+      vertical-align: middle;
+      color: #b8b0cc;
+    }
+
+    .정렬표시.활성 {
+      color: #8064d8;
+      font-weight: 700;
+    }
+
+    /* 컬럼 구분 실선 (항상 보이는 세로선, 열 경계에 위치) */
+    .품목표 thead th:not(:last-child) {
+      border-right: 1px solid #8b849d;
+    }
+
+    .품목표 tbody td:not(:last-child) {
+      border-right: 1px solid #ece6f7;
     }
 
     .품목표 tbody td {
@@ -977,21 +1015,21 @@
       white-space: nowrap;
     }
 
-    /* 컬럼 리사이즈 핸들 */
+    /* 컬럼 리사이즈 핸들
+       - 열 경계선(border-right) 정중앙에 위치
+       - 폭 14px, 경계선 기준 좌우 7px씩 걸침
+       - 배경 완전 투명, cursor만 col-resize
+       - 검은 세로선은 th의 border-right가 그대로 표시 */
     .리사이즈핸들 {
       position: absolute;
       top: 0;
-      right: 0;
-      width: 6px;
+      right: -7px;
+      width: 14px;
       height: 100%;
       cursor: col-resize;
       user-select: none;
-      z-index: 2;
-    }
-
-    .리사이즈핸들:hover,
-    .리사이즈핸들.활성 {
-      background: #c8b8f0;
+      z-index: 3;
+      background: transparent;
     }
 
     body.리사이즈중 {
@@ -1265,10 +1303,6 @@
 
       <div class="사이드바병원">
 
-        <div class="label">
-          현재 병원
-        </div>
-
         <div
           id="사이드바병원명"
           class="name"
@@ -1296,14 +1330,14 @@
             class="메뉴버튼 그룹상위"
             onclick="그룹토글('procedure')"
           >
-            <span>시술내역</span>
+            <span>시술</span>
             <span class="그룹화살표">&#9654;</span>
           </button>
           <div class="하위목록">
-            <button class="하위버튼" data-page="procedure_main" onclick="페이지이동('procedure_main')">시술내역 메인</button>
+            <button class="하위버튼" data-page="procedure_main" onclick="페이지이동('procedure_main')">시술 메인</button>
             <button class="하위버튼" data-page="procedure_normal" onclick="페이지이동('procedure_normal')">일반 시술</button>
             <button class="하위버튼" data-page="procedure_membership" onclick="페이지이동('procedure_membership')">회원권 시술</button>
-            <button class="하위버튼" data-page="procedure_free" onclick="페이지이동('procedure_free')">체험단·무료 시술</button>
+            <button class="하위버튼" data-page="procedure_free" onclick="페이지이동('procedure_free')">체험단 및 무료 시술</button>
             <button class="하위버튼" data-page="procedure_multi" onclick="페이지이동('procedure_multi')">다회차 관리</button>
           </div>
         </div>
@@ -1314,16 +1348,16 @@
             class="메뉴버튼 그룹상위"
             onclick="그룹토글('purchase')"
           >
-            <span>구매관리</span>
+            <span>구매</span>
             <span class="그룹화살표">&#9654;</span>
           </button>
           <div class="하위목록">
-            <button class="하위버튼" data-page="purchase_main" onclick="페이지이동('purchase_main')">구매관리 메인</button>
+            <button class="하위버튼" data-page="purchase_main" onclick="페이지이동('purchase_main')">구매 메인</button>
             <button class="하위버튼" data-page="purchase_order" onclick="페이지이동('purchase_order')">발주</button>
             <button class="하위버튼" data-page="purchase_receive" onclick="페이지이동('purchase_receive')">입고</button>
             <button class="하위버튼" data-page="purchase_history" onclick="페이지이동('purchase_history')">발주/입고 이력</button>
             <button class="하위버튼" data-page="purchase_vendor" onclick="페이지이동('purchase_vendor')">거래처</button>
-            <button class="하위버튼" data-page="purchase_ar" onclick="페이지이동('purchase_ar')">미수관리</button>
+            <button class="하위버튼" data-page="purchase_unpaid" onclick="페이지이동('purchase_unpaid')">미지급 관리</button>
           </div>
         </div>
 
@@ -1333,27 +1367,17 @@
             class="메뉴버튼 그룹상위"
             onclick="그룹토글('inventory')"
           >
-            <span>재고관리</span>
+            <span>재고</span>
             <span class="그룹화살표">&#9654;</span>
           </button>
           <div class="하위목록">
-            <button class="하위버튼" data-page="inventory_main" onclick="페이지이동('inventory_main')">재고관리 메인</button>
-            <button class="하위버튼" data-page="inventory_current" onclick="페이지이동('inventory_current')">현재 재고</button>
-            <button class="하위버튼" data-page="inventory_history" onclick="페이지이동('inventory_history')">품목별 이력</button>
-            <button class="하위버튼" data-page="inventory_use" onclick="페이지이동('inventory_use')">사용 등록</button>
+            <button class="하위버튼" data-page="inventory_main" onclick="페이지이동('inventory_main')">재고 메인</button>
+            <button class="하위버튼" data-page="inventory_current" onclick="페이지이동('inventory_current')">현재고</button>
+            <button class="하위버튼" data-page="inventory_use" onclick="페이지이동('inventory_use')">사용등록</button>
             <button class="하위버튼" data-page="inventory_adjust" onclick="페이지이동('inventory_adjust')">재고 조정</button>
             <button class="하위버튼" data-page="inventory_close" onclick="페이지이동('inventory_close')">마감 관리</button>
           </div>
         </div>
-
-
-        <button
-          class="메뉴버튼"
-          data-page="item"
-          onclick="페이지이동('item')"
-        >
-          품목 관리
-        </button>
 
 
         <div class="메뉴그룹" data-group="statistics">
@@ -1368,28 +1392,24 @@
             <button class="하위버튼" data-page="stats_sales" onclick="페이지이동('stats_sales')">매출 통계</button>
             <button class="하위버튼" data-page="stats_cost" onclick="페이지이동('stats_cost')">원가 통계</button>
             <button class="하위버튼" data-page="stats_profit" onclick="페이지이동('stats_profit')">이익 통계</button>
-            <button class="하위버튼" data-page="stats_consultant" onclick="페이지이동('stats_consultant')">상담실장별</button>
-            <button class="하위버튼" data-page="stats_doctor" onclick="페이지이동('stats_doctor')">원장별</button>
-            <button class="하위버튼" data-page="stats_region" onclick="페이지이동('stats_region')">국내·해외</button>
-            <button class="하위버튼" data-page="stats_procedure" onclick="페이지이동('stats_procedure')">시술별</button>
-            <button class="하위버튼" data-page="stats_item" onclick="페이지이동('stats_item')">품목별</button>
           </div>
         </div>
 
 
-        <div class="메뉴그룹" data-group="settings">
+        <div class="메뉴그룹" data-group="management">
           <button
             class="메뉴버튼 그룹상위"
-            onclick="그룹토글('settings')"
+            onclick="그룹토글('management')"
           >
-            <span>설정</span>
+            <span>관리</span>
             <span class="그룹화살표">&#9654;</span>
           </button>
           <div class="하위목록">
-            <button class="하위버튼" data-page="settings_hospital" onclick="페이지이동('settings_hospital')">병원 관리</button>
-            <button class="하위버튼" data-page="settings_user" onclick="페이지이동('settings_user')">사용자 관리</button>
-            <button class="하위버튼" data-page="settings_cost" onclick="페이지이동('settings_cost')">원가 기준</button>
-            <button class="하위버튼" data-page="settings_vendor_info" onclick="페이지이동('settings_vendor_info')">거래처/기본정보</button>
+            <button class="하위버튼" data-page="mgmt_hospital" onclick="페이지이동('mgmt_hospital')">병원 관리</button>
+            <button class="하위버튼" data-page="mgmt_user" onclick="페이지이동('mgmt_user')">사용자 관리</button>
+            <button class="하위버튼" data-page="item" onclick="페이지이동('item')">품목 관리</button>
+            <button class="하위버튼" data-page="mgmt_cost" onclick="페이지이동('mgmt_cost')">원가 기준</button>
+            <button class="하위버튼" data-page="mgmt_vendor_info" onclick="페이지이동('mgmt_vendor_info')">거래처/기본정보</button>
           </div>
         </div>
 
@@ -1513,6 +1533,8 @@
 
   // 품목 관리 상태
   let 품목_원본목록 = [];
+  let 품목_현재표시목록 = [];   // 검색 필터 적용 후 목록 (정렬 재적용용)
+  let 품목_정렬 = { 필드: null, 방향: null };   // 방향: 'asc' | 'desc'
 
 
   /* ================================================================
@@ -1829,66 +1851,55 @@
     purchase_receive: 'purchase',
     purchase_history: 'purchase',
     purchase_vendor: 'purchase',
-    purchase_ar: 'purchase',
+    purchase_unpaid: 'purchase',
     inventory_main: 'inventory',
     inventory_current: 'inventory',
-    inventory_history: 'inventory',
     inventory_use: 'inventory',
     inventory_adjust: 'inventory',
     inventory_close: 'inventory',
     stats_sales: 'statistics',
     stats_cost: 'statistics',
     stats_profit: 'statistics',
-    stats_consultant: 'statistics',
-    stats_doctor: 'statistics',
-    stats_region: 'statistics',
-    stats_procedure: 'statistics',
-    stats_item: 'statistics',
-    settings_hospital: 'settings',
-    settings_user: 'settings',
-    settings_cost: 'settings',
-    settings_vendor_info: 'settings'
+    mgmt_hospital: 'management',
+    mgmt_user: 'management',
+    item: 'management',
+    mgmt_cost: 'management',
+    mgmt_vendor_info: 'management'
   };
 
 
   /* 페이지 정보 (제목/설명) */
   const 페이지정보 = {
     dashboard: { title: '대시보드', description: '통합관리 시스템 현황' },
-    item: { title: '품목 관리', description: '품목 등록 및 조회' },
 
-    procedure_main: { title: '시술내역', description: '시술내역 메인' },
+    procedure_main: { title: '시술 메인', description: '시술 현황 요약' },
     procedure_normal: { title: '일반 시술', description: '일반 시술 등록 및 조회' },
     procedure_membership: { title: '회원권 시술', description: '회원권 시술 등록 및 조회' },
-    procedure_free: { title: '체험단·무료 시술', description: '체험단 및 무료 시술 관리' },
+    procedure_free: { title: '체험단 및 무료 시술', description: '체험단 및 무료 시술 관리' },
     procedure_multi: { title: '다회차 관리', description: '다회차 시술 관리' },
 
-    purchase_main: { title: '구매관리', description: '구매관리 메인' },
+    purchase_main: { title: '구매 메인', description: '구매 현황 요약' },
     purchase_order: { title: '발주', description: '발주 등록 및 조회' },
     purchase_receive: { title: '입고', description: '입고 등록 및 조회' },
     purchase_history: { title: '발주/입고 이력', description: '발주 및 입고 이력' },
     purchase_vendor: { title: '거래처', description: '거래처 등록 및 관리' },
-    purchase_ar: { title: '미수관리', description: '미수 채권 관리' },
+    purchase_unpaid: { title: '미지급 관리', description: '거래처 미지급금 관리' },
 
-    inventory_main: { title: '재고관리', description: '재고관리 메인' },
-    inventory_current: { title: '현재 재고', description: '품목별 현재 재고 조회' },
-    inventory_history: { title: '품목별 이력', description: '품목별 재고 이력 조회' },
-    inventory_use: { title: '사용 등록', description: '재고 사용 등록' },
+    inventory_main: { title: '재고 메인', description: '재고 현황 요약' },
+    inventory_current: { title: '현재고', description: '품목별 현재 재고 조회 (품목 클릭 → 이력)' },
+    inventory_use: { title: '사용등록', description: '재고 사용 등록' },
     inventory_adjust: { title: '재고 조정', description: '재고 조정 등록' },
     inventory_close: { title: '마감 관리', description: '기간별 재고 마감' },
 
-    stats_sales: { title: '매출 통계', description: '매출 통계 조회' },
-    stats_cost: { title: '원가 통계', description: '원가 통계 조회' },
-    stats_profit: { title: '이익 통계', description: '이익 통계 조회' },
-    stats_consultant: { title: '상담실장별', description: '상담실장별 통계' },
-    stats_doctor: { title: '원장별', description: '원장별 통계' },
-    stats_region: { title: '국내·해외', description: '국내·해외 통계' },
-    stats_procedure: { title: '시술별', description: '시술별 통계' },
-    stats_item: { title: '품목별', description: '품목별 통계' },
+    stats_sales: { title: '매출 통계', description: '매출 통계 (시술/품목/원장/지역 필터)' },
+    stats_cost: { title: '원가 통계', description: '원가 통계 (시술/품목/원장/지역 필터)' },
+    stats_profit: { title: '이익 통계', description: '이익 통계 (시술/품목/원장/지역 필터)' },
 
-    settings_hospital: { title: '병원 관리', description: '병원 정보 관리' },
-    settings_user: { title: '사용자 관리', description: '사용자 등록 및 권한 관리' },
-    settings_cost: { title: '원가 기준', description: '원가 계산 기준 설정' },
-    settings_vendor_info: { title: '거래처/기본정보', description: '거래처 및 기본정보 설정' }
+    mgmt_hospital: { title: '병원 관리', description: '병원 정보 관리' },
+    mgmt_user: { title: '사용자 관리', description: '사용자 등록 및 권한 관리' },
+    item: { title: '품목 관리', description: '품목 등록 및 조회' },
+    mgmt_cost: { title: '원가 기준', description: '원가 계산 기준 설정' },
+    mgmt_vendor_info: { title: '거래처/기본정보', description: '거래처 및 기본정보 설정' }
   };
 
 
@@ -2327,13 +2338,13 @@
 
           <thead>
             <tr>
-              <th>품목ID<span class="리사이즈핸들" data-col="0"></span></th>
-              <th>분류<span class="리사이즈핸들" data-col="1"></span></th>
-              <th>품목명<span class="리사이즈핸들" data-col="2"></span></th>
-              <th>단위<span class="리사이즈핸들" data-col="3"></span></th>
-              <th>규격<span class="리사이즈핸들" data-col="4"></span></th>
-              <th class="가운데">사용여부<span class="리사이즈핸들" data-col="5"></span></th>
-              <th class="가운데">관리</th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('품목ID')">품목ID<span class="정렬표시" data-key="품목ID">&#8645;</span></span><span class="리사이즈핸들" data-col="0"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('분류')">분류<span class="정렬표시" data-key="분류">&#8645;</span></span><span class="리사이즈핸들" data-col="1"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('품목명')">품목명<span class="정렬표시" data-key="품목명">&#8645;</span></span><span class="리사이즈핸들" data-col="2"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('단위')">단위<span class="정렬표시" data-key="단위">&#8645;</span></span><span class="리사이즈핸들" data-col="3"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('규격')">규격<span class="정렬표시" data-key="규격">&#8645;</span></span><span class="리사이즈핸들" data-col="4"></span></th>
+              <th class="가운데"><span class="th_텍스트" onclick="품목_정렬토글('사용여부')">사용여부<span class="정렬표시" data-key="사용여부">&#8645;</span></span><span class="리사이즈핸들" data-col="5"></span></th>
+              <th class="가운데"><span class="th_텍스트" style="cursor:default">관리</span></th>
             </tr>
           </thead>
 
@@ -2406,7 +2417,9 @@
         }
       )
 
-      .ITEM_getList();
+      .ITEM_getList(
+        현재세션 ? 현재세션.token : ''
+      );
 
   }
 
@@ -2508,6 +2521,9 @@
 
   function 품목_테이블렌더(list) {
 
+    // 검색/필터 결과를 저장해두고, 정렬 상태에 맞게 재렌더 가능하게 함
+    품목_현재표시목록 = list || [];
+
     const tbody =
       document.getElementById('품목표본문');
 
@@ -2521,13 +2537,16 @@
       tbody.innerHTML =
         '<tr><td colspan="7"><div class="품목안내">표시할 품목이 없습니다.</div></td></tr>';
 
+      품목_정렬표시갱신();
       return;
 
     }
 
 
+    const 정렬된 = 품목_정렬적용(list);
+
     tbody.innerHTML =
-      list.map(function(item) {
+      정렬된.map(function(item) {
 
         const 사용 =
           품목_사용여부불린(item.사용여부);
@@ -2558,6 +2577,87 @@
         `;
 
       }).join('');
+
+    품목_정렬표시갱신();
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 정렬 (오름차순 ↔ 내림차순 토글)
+     ================================================================ */
+
+  function 품목_정렬토글(필드) {
+
+    if (품목_정렬.필드 === 필드) {
+      // 같은 컬럼: 방향 반전
+      품목_정렬.방향 =
+        품목_정렬.방향 === 'asc' ? 'desc' : 'asc';
+    } else {
+      // 다른 컬럼: 오름차순부터
+      품목_정렬 = { 필드: 필드, 방향: 'asc' };
+    }
+
+    // 현재 표시 중인 목록을 다시 렌더 (정렬만 재적용)
+    품목_테이블렌더(품목_현재표시목록);
+
+  }
+
+
+  function 품목_정렬적용(list) {
+
+    if (!품목_정렬.필드 || !품목_정렬.방향) {
+      return list;
+    }
+
+    const 필드 = 품목_정렬.필드;
+    const 부호 = 품목_정렬.방향 === 'asc' ? 1 : -1;
+
+    return list.slice().sort(function(a, b) {
+
+      const va = a[필드];
+      const vb = b[필드];
+
+      // 사용여부는 불린 정렬 (false < true)
+      if (필드 === '사용여부') {
+        const na = (va === true || String(va).toLowerCase() !== 'false') ? 1 : 0;
+        const nb = (vb === true || String(vb).toLowerCase() !== 'false') ? 1 : 0;
+        return (na - nb) * 부호;
+      }
+
+      // 문자열 정렬 (한글 로케일)
+      return String(va == null ? '' : va)
+        .localeCompare(
+          String(vb == null ? '' : vb),
+          'ko'
+        ) * 부호;
+
+    });
+
+  }
+
+
+  function 품목_정렬표시갱신() {
+
+    document
+      .querySelectorAll('.정렬표시')
+      .forEach(function(el) {
+
+        const key = el.dataset.key;
+        const 활성 =
+          key === 품목_정렬.필드 && 품목_정렬.방향;
+
+        if (활성) {
+          el.textContent =
+            품목_정렬.방향 === 'asc' ? '▲' : '▼';
+          el.classList.add('활성');
+        } else {
+          // 기본 상태: 옅은 회색 ⇅ (정렬 가능 힌트)
+          el.textContent = '⇅';
+          el.classList.remove('활성');
+        }
+
+      });
 
   }
 
@@ -2720,7 +2820,10 @@
         }
       )
 
-      .ITEM_save(data);
+      .ITEM_save(
+        현재세션 ? 현재세션.token : '',
+        data
+      );
 
   }
 
@@ -2784,7 +2887,10 @@
         }
       )
 
-      .ITEM_delete(id);
+      .ITEM_delete(
+        현재세션 ? 현재세션.token : '',
+        id
+      );
 
   }
 
