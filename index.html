@@ -908,6 +908,21 @@
       text-align: center;
     }
 
+    .품목링크 {
+      cursor: pointer;
+      color: #2563eb;
+      margin: 0 6px;
+    }
+
+    .품목링크:hover {
+      color: #1d4ed8;
+    }
+
+    .미사용텍스트 {
+      color: #d92d20;
+      font-weight: 700;
+    }
+
     .사용뱃지 {
 
       display: inline-block;
@@ -2054,33 +2069,23 @@
         <div class="품목폼그리드">
 
           <div class="품목폼필드">
+            <label>분류</label>
+            <input id="품목_분류" type="text" placeholder="분류 (예: 필러, 주사제, 소모품)">
+          </div>
+
+          <div class="품목폼필드">
             <label>품목명 <span class="필수">*</span></label>
             <input id="품목_품목명" type="text" placeholder="품목명">
           </div>
 
           <div class="품목폼필드">
-            <label>분류</label>
-            <input id="품목_분류" type="text" placeholder="분류">
+            <label>단위</label>
+            <input id="품목_단위" type="text" placeholder="단위 (예: EA)">
           </div>
 
           <div class="품목폼필드">
             <label>규격</label>
-            <input id="품목_규격" type="text" placeholder="규격">
-          </div>
-
-          <div class="품목폼필드">
-            <label>단위</label>
-            <input id="품목_단위" type="text" placeholder="단위">
-          </div>
-
-          <div class="품목폼필드">
-            <label>기본단가</label>
-            <input id="품목_기본단가" type="number" min="0" step="1" placeholder="0">
-          </div>
-
-          <div class="품목폼필드">
-            <label>관리단위</label>
-            <input id="품목_관리단위" type="text" placeholder="관리단위">
+            <input id="품목_규격" type="text" placeholder="규격 (예: 2CC, 10CC, 100U)">
           </div>
 
           <div class="품목폼필드">
@@ -2128,12 +2133,10 @@
           <thead>
             <tr>
               <th>품목ID</th>
-              <th>품목명</th>
               <th>분류</th>
-              <th>규격</th>
+              <th>품목명</th>
               <th>단위</th>
-              <th class="우">기본단가</th>
-              <th>관리단위</th>
+              <th>규격</th>
               <th class="가운데">사용여부</th>
               <th class="가운데">관리</th>
             </tr>
@@ -2141,7 +2144,7 @@
 
           <tbody id="품목표본문">
             <tr>
-              <td colspan="9">
+              <td colspan="7">
                 <div class="품목안내">
                   불러오는 중입니다...
                 </div>
@@ -2171,7 +2174,7 @@
 
     if (tbody) {
       tbody.innerHTML =
-        '<tr><td colspan="9"><div class="품목안내">불러오는 중입니다...</div></td></tr>';
+        '<tr><td colspan="7"><div class="품목안내">불러오는 중입니다...</div></td></tr>';
     }
 
 
@@ -2202,7 +2205,7 @@
 
           if (tb) {
             tb.innerHTML =
-              '<tr><td colspan="9"><div class="품목안내">불러오기에 실패했습니다.</div></td></tr>';
+              '<tr><td colspan="7"><div class="품목안내">불러오기에 실패했습니다.</div></td></tr>';
           }
 
         }
@@ -2321,7 +2324,7 @@
     if (!list || list.length === 0) {
 
       tbody.innerHTML =
-        '<tr><td colspan="9"><div class="품목안내">표시할 품목이 없습니다.</div></td></tr>';
+        '<tr><td colspan="7"><div class="품목안내">표시할 품목이 없습니다.</div></td></tr>';
 
       return;
 
@@ -2341,28 +2344,20 @@
         return `
           <tr>
             <td>${품목_escape(품목ID)}</td>
-            <td>${품목_escape(item.품목명)}</td>
             <td>${품목_escape(item.분류)}</td>
-            <td>${품목_escape(item.규격)}</td>
+            <td>${품목_escape(item.품목명)}</td>
             <td>${품목_escape(item.단위)}</td>
-            <td class="우">${품목_숫자콤마(item.기본단가)}</td>
-            <td>${품목_escape(item.관리단위)}</td>
+            <td>${품목_escape(item.규격)}</td>
+            <td class="가운데">${사용 ? '사용' : '<span class="미사용텍스트">미사용</span>'}</td>
             <td class="가운데">
-              <span class="사용뱃지 ${사용 ? '사용' : '미사용'}">
-                ${사용 ? '사용' : '미사용'}
-              </span>
-            </td>
-            <td class="가운데">
-              <span class="품목행버튼">
-                <button
-                  class="버튼 버튼보조 버튼작음"
-                  onclick="품목_수정폼열기('${품목_escapeAttr(품목ID)}')"
-                >수정</button>
-                <button
-                  class="버튼 버튼삭제 버튼작음"
-                  onclick="품목_삭제('${품목_escapeAttr(품목ID)}')"
-                >삭제</button>
-              </span>
+              <span
+                class="품목링크"
+                onclick="품목_수정폼열기('${품목_escapeAttr(품목ID)}')"
+              >수정</span>
+              <span
+                class="품목링크"
+                onclick="품목_삭제('${품목_escapeAttr(품목ID)}')"
+              >삭제</span>
             </td>
           </tr>
         `;
@@ -2381,12 +2376,10 @@
     document.getElementById('품목폼제목').textContent = '품목 등록';
 
     document.getElementById('품목_품목ID').value = '';
-    document.getElementById('품목_품목명').value = '';
     document.getElementById('품목_분류').value = '';
-    document.getElementById('품목_규격').value = '';
+    document.getElementById('품목_품목명').value = '';
     document.getElementById('품목_단위').value = '';
-    document.getElementById('품목_기본단가').value = '';
-    document.getElementById('품목_관리단위').value = '';
+    document.getElementById('품목_규격').value = '';
     document.getElementById('품목_사용여부').checked = true;
 
     품목_상태표시('', '');
@@ -2419,13 +2412,10 @@
     document.getElementById('품목폼제목').textContent = '품목 수정';
 
     document.getElementById('품목_품목ID').value = String(item.품목ID || '');
-    document.getElementById('품목_품목명').value = String(item.품목명 || '');
     document.getElementById('품목_분류').value = String(item.분류 || '');
-    document.getElementById('품목_규격').value = String(item.규격 || '');
+    document.getElementById('품목_품목명').value = String(item.품목명 || '');
     document.getElementById('품목_단위').value = String(item.단위 || '');
-    document.getElementById('품목_기본단가').value =
-      (item.기본단가 === '' || item.기본단가 == null) ? '' : item.기본단가;
-    document.getElementById('품목_관리단위').value = String(item.관리단위 || '');
+    document.getElementById('품목_규격').value = String(item.규격 || '');
     document.getElementById('품목_사용여부').checked =
       품목_사용여부불린(item.사용여부);
 
@@ -2464,17 +2454,11 @@
     const 분류 =
       document.getElementById('품목_분류').value.trim();
 
-    const 규격 =
-      document.getElementById('품목_규격').value.trim();
-
     const 단위 =
       document.getElementById('품목_단위').value.trim();
 
-    const 기본단가값 =
-      document.getElementById('품목_기본단가').value;
-
-    const 관리단위 =
-      document.getElementById('품목_관리단위').value.trim();
+    const 규격 =
+      document.getElementById('품목_규격').value.trim();
 
     const 사용여부 =
       document.getElementById('품목_사용여부').checked;
@@ -2487,24 +2471,11 @@
     }
 
 
-    const 기본단가 =
-      기본단가값 === '' ? 0 : Number(기본단가값);
-
-
-    if (isNaN(기본단가) || 기본단가 < 0) {
-      품목_상태표시('기본단가는 0 이상의 숫자로 입력해주세요.', '오류');
-      document.getElementById('품목_기본단가').focus();
-      return;
-    }
-
-
     const data = {
-      품목명: 품목명,
       분류: 분류,
-      규격: 규격,
+      품목명: 품목명,
       단위: 단위,
-      기본단가: 기본단가,
-      관리단위: 관리단위,
+      규격: 규격,
       사용여부: 사용여부
     };
 

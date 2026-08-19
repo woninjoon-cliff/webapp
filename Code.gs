@@ -31,12 +31,10 @@ function DB_초기화() {
 
     '03_품목': [
       '품목ID',
-      '품목명',
       '분류',
-      '규격',
+      '품목명',
       '단위',
-      '기본단가',
-      '관리단위',
+      '규격',
       '사용여부',
       '등록일시',
       '수정일시'
@@ -258,38 +256,36 @@ function ITEM_getList() {
   }
 
   const values = sheet
-    .getRange(2, 1, lastRow - 1, 10)
+    .getRange(2, 1, lastRow - 1, 8)
     .getValues();
 
   return values
     .filter(function(row) {
-      return row[0] !== '' || row[1] !== '';
+      return row[0] !== '' || row[2] !== '';
     })
     .map(function(row) {
 
       return {
         품목ID: String(row[0] || ''),
-        품목명: String(row[1] || ''),
-        분류: String(row[2] || ''),
-        규격: String(row[3] || ''),
-        단위: String(row[4] || ''),
-        기본단가: Number(row[5] || 0),
-        관리단위: String(row[6] || ''),
-        사용여부: row[7] === true ||
-                 String(row[7]).toLowerCase() !== 'false',
+        분류: String(row[1] || ''),
+        품목명: String(row[2] || ''),
+        단위: String(row[3] || ''),
+        규격: String(row[4] || ''),
+        사용여부: row[5] === true ||
+                 String(row[5]).toLowerCase() !== 'false',
 
         // Date 객체를 문자열로 변환
-        등록일시: row[8]
+        등록일시: row[6]
           ? Utilities.formatDate(
-              new Date(row[8]),
+              new Date(row[6]),
               Session.getScriptTimeZone(),
               'yyyy-MM-dd HH:mm:ss'
             )
           : '',
 
-        수정일시: row[9]
+        수정일시: row[7]
           ? Utilities.formatDate(
-              new Date(row[9]),
+              new Date(row[7]),
               Session.getScriptTimeZone(),
               'yyyy-MM-dd HH:mm:ss'
             )
@@ -333,21 +329,6 @@ function ITEM_save(data) {
 
   const 단위 =
     String(data.단위 || '').trim();
-
-  const 관리단위 =
-    String(data.관리단위 || '').trim();
-
-  let 기본단가 =
-    Number(data.기본단가 || 0);
-
-  if (
-    isNaN(기본단가) ||
-    기본단가 < 0
-  ) {
-    throw new Error(
-      '기본단가는 0 이상의 숫자여야 합니다.'
-    );
-  }
 
   const 사용여부 =
     data.사용여부 === false ||
@@ -425,7 +406,7 @@ function ITEM_save(data) {
           2,
           1,
           lastRow - 1,
-          10
+          8
         )
         .getValues();
 
@@ -440,7 +421,7 @@ function ITEM_save(data) {
         String(rows[i][0] || '');
 
       const rowName =
-        String(rows[i][1] || '')
+        String(rows[i][2] || '')
           .trim()
           .toLowerCase();
 
@@ -460,22 +441,22 @@ function ITEM_save(data) {
     }
 
 
+    // 컬럼 순서: 품목ID / 분류 / 품목명 / 단위 / 규격 / 사용여부 / 등록일시 / 수정일시
+    // 품목ID(1열)는 유지, 2열(분류)~8열(수정일시) 갱신
     sheet
       .getRange(
         targetRow,
         2,
         1,
-        9
+        7
       )
       .setValues([[
-        품목명,
         분류,
-        규격,
+        품목명,
         단위,
-        기본단가,
-        관리단위,
+        규격,
         사용여부,
-        rows[targetRow - 2][8] || now,
+        rows[targetRow - 2][6] || now,
         now
       ]]);
 
@@ -499,11 +480,12 @@ function ITEM_save(data) {
 
   if (lastRow >= 2) {
 
+    // 품목명은 3열
     const names =
       sheet
         .getRange(
           2,
-          2,
+          3,
           lastRow - 1,
           1
         )
@@ -539,15 +521,14 @@ function ITEM_save(data) {
     ITEM_새ID생성_();
 
 
+  // 컬럼 순서: 품목ID / 분류 / 품목명 / 단위 / 규격 / 사용여부 / 등록일시 / 수정일시
   sheet.appendRow([
 
     품목ID,
-    품목명,
     분류,
-    규격,
+    품목명,
     단위,
-    기본단가,
-    관리단위,
+    규격,
     사용여부,
     now,
     now
@@ -735,10 +716,8 @@ function test_ITEM_전체흐름() {
   const 등록결과 = ITEM_save({
     품목명: 테스트품목명,
     분류: '테스트분류',
-    규격: '10ml',
     단위: 'EA',
-    기본단가: 1000,
-    관리단위: 'BOX',
+    규격: '2CC',
     사용여부: true
   });
   Logger.log('1. 등록: ' + 등록결과);
@@ -755,10 +734,8 @@ function test_ITEM_전체흐름() {
     품목ID: 품목ID,
     품목명: 테스트품목명,
     분류: '수정분류',
-    규격: '20ml',
     단위: 'EA',
-    기본단가: 2000,
-    관리단위: 'BOX',
+    규격: '10CC',
     사용여부: false
   });
   Logger.log('3. 수정: ' + 수정결과);
@@ -766,7 +743,7 @@ function test_ITEM_전체흐름() {
   // 4) 재조회
   목록 = ITEM_getList();
   대상 = 목록.filter(function(x){ return x.품목ID === 품목ID; })[0];
-  Logger.log('4. 재조회: 분류=' + 대상.분류 + ', 기본단가=' + 대상.기본단가 + ', 사용여부=' + 대상.사용여부);
+  Logger.log('4. 재조회: 분류=' + 대상.분류 + ', 규격=' + 대상.규격 + ', 사용여부=' + 대상.사용여부);
 
   // 5) 삭제
   const 삭제결과 = ITEM_delete(품목ID);
@@ -778,4 +755,148 @@ function test_ITEM_전체흐름() {
   Logger.log('6. 삭제 확인: 잔존 ' + 남음 + '건 (0이어야 정상)');
 
   Logger.log('=== 품목 CRUD 테스트 종료 ===');
+}
+
+
+// =====================================================================
+// 03_품목 시트 재구성 (데이터 보존형 마이그레이션)
+//
+// 컬럼을 새 구조로 이관:
+//   품목ID / 분류 / 품목명 / 단위 / 규격 / 사용여부 / 등록일시 / 수정일시
+//
+// - 기존 품목 데이터(행)는 보존한다.
+// - 기존 헤더명을 기준으로 값을 새 컬럼 위치로 옮긴다.
+// - 기본단가 / 관리단위 컬럼은 설계상 제거(값 폐기).
+// - 이미 새 구조면 아무 작업도 하지 않는다.
+// - 최초 1회 수동 실행.
+// =====================================================================
+
+function ITEM_시트재구성() {
+
+  const 새헤더 = [
+    '품목ID',
+    '분류',
+    '품목명',
+    '단위',
+    '규격',
+    '사용여부',
+    '등록일시',
+    '수정일시'
+  ];
+
+  const ss =
+    SpreadsheetApp.openById(DB_SPREADSHEET_ID);
+
+  let sheet =
+    ss.getSheetByName('03_품목');
+
+  // 시트가 없으면 새로 만들고 헤더만 기록
+  if (!sheet) {
+    sheet = ss.insertSheet('03_품목');
+    ITEM_헤더쓰기_(sheet, 새헤더);
+    Logger.log('03_품목 신규 생성: 헤더만 기록');
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+
+  // 빈 시트면 헤더만 기록
+  if (lastRow < 1 || lastCol < 1) {
+    ITEM_헤더쓰기_(sheet, 새헤더);
+    Logger.log('03_품목 빈 시트: 헤더만 기록');
+    return;
+  }
+
+  const 기존헤더 =
+    sheet
+      .getRange(1, 1, 1, lastCol)
+      .getValues()[0]
+      .map(function(v) { return String(v); });
+
+  // 이미 새 구조면 종료 (중복 실행 방지)
+  if (기존헤더.join('|') === 새헤더.join('|')) {
+    Logger.log('03_품목 이미 새 구조. 변경 없음.');
+    return;
+  }
+
+  // 기존 헤더명 → 인덱스
+  const 위치 = {};
+  새헤더.forEach(function(h) {
+    위치[h] = 기존헤더.indexOf(h);
+  });
+
+  const 새행 = [];
+
+  if (lastRow >= 2) {
+
+    const 데이터 =
+      sheet
+        .getRange(2, 1, lastRow - 1, lastCol)
+        .getValues();
+
+    데이터.forEach(function(row) {
+
+      const 가져오기 = function(field, 기본) {
+        const c = 위치[field];
+        return c >= 0 ? row[c] : (기본 === undefined ? '' : 기본);
+      };
+
+      const pid = String(가져오기('품목ID'));
+      const pname = String(가져오기('품목명'));
+
+      // 완전히 빈 행은 건너뜀
+      if (pid === '' && pname === '') {
+        return;
+      }
+
+      새행.push([
+        가져오기('품목ID'),
+        가져오기('분류'),
+        가져오기('품목명'),
+        가져오기('단위'),
+        가져오기('규격'),
+        가져오기('사용여부', true),
+        가져오기('등록일시'),
+        가져오기('수정일시')
+      ]);
+
+    });
+  }
+
+  // 새 구조로 재작성
+  sheet.clear();
+
+  ITEM_헤더쓰기_(sheet, 새헤더);
+
+  if (새행.length > 0) {
+    sheet
+      .getRange(2, 1, 새행.length, 새헤더.length)
+      .setValues(새행);
+  }
+
+  sheet.autoResizeColumns(1, 새헤더.length);
+
+  SpreadsheetApp.flush();
+
+  Logger.log(
+    '03_품목 재구성 완료: ' + 새행.length +
+    '건 이관 (기본단가/관리단위 제거)'
+  );
+}
+
+
+function ITEM_헤더쓰기_(sheet, 헤더) {
+
+  sheet
+    .getRange(1, 1, 1, 헤더.length)
+    .setValues([헤더]);
+
+  sheet.setFrozenRows(1);
+
+  sheet
+    .getRange(1, 1, 1, 헤더.length)
+    .setFontWeight('bold');
+
+  sheet.autoResizeColumns(1, 헤더.length);
 }
