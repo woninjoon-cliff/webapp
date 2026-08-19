@@ -296,16 +296,14 @@
 
     const map = {
 
-      ADMIN: '관리자',
+    ADMIN: '관리자',
 
-      MANAGER: '매니저',
+    STAFF: '직원'
 
-      USER: '사용자'
-
-    };
+  };
 
 
-    return map[권한] || 권한 || '-';
+    return map[String(권한 || '').toUpperCase()] || 권한 || '-';
 
   }
 
@@ -494,6 +492,32 @@
       return;
 
     }
+
+
+  if (page === 'mgmt_user') {
+
+    content.innerHTML =
+      사용자관리화면();
+
+    사용자표_컬럼리사이즈초기화();
+
+    사용자_목록불러오기();
+
+    return;
+
+  }
+
+
+  if (page === 'mgmt_hospital') {
+
+    content.innerHTML =
+      병원관리화면();
+
+    병원정보_불러오기();
+
+    return;
+
+  }
 
 
     /* 하위 페이지는 모두 준비화면 (기능 구현 순서대로 하나씩 교체) */

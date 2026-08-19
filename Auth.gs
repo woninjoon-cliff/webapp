@@ -66,6 +66,15 @@ function AUTH_login(hospitalId, username, password) {
     throw new Error('아이디 또는 비밀번호가 올바르지 않습니다.');
   }
 
+  // 마지막로그인 갱신 (실패해도 로그인은 진행)
+  try {
+    DB_updateById('사용자', '사용자ID', user['사용자ID'], {
+      마지막로그인: new Date()
+    });
+  } catch (e) {
+    // 무시
+  }
+
   const token = AUTH_createSession(user);
 
   return {

@@ -1,0 +1,548 @@
+<style>
+
+/* ================================================================
+   관리 > 사용자 관리 — 상단바 / 검색 툴바
+   ================================================================ */
+
+.사용자상단바 {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.사용자툴바 {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  margin-bottom: 18px;
+  padding: 16px 18px;
+
+  background: white;
+  border: 1px solid #eeeaf5;
+  border-radius: 13px;
+}
+
+.사용자툴바 .필드 {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.사용자툴바 .필드 label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b849d;
+}
+
+.사용자툴바 input,
+.사용자툴바 select {
+  height: 40px;
+  padding: 0 11px;
+
+  border: 1px solid #ddd7ee;
+  border-radius: 8px;
+
+  background: white;
+  font-size: 13px;
+  outline: none;
+}
+
+.사용자툴바 input:focus,
+.사용자툴바 select:focus {
+  border-color: #8064d8;
+}
+
+.사용자툴바 .툴바여백 {
+  flex: 1;
+}
+
+
+/* ================================================================
+   등록 / 수정 폼
+   ================================================================ */
+
+.사용자폼 {
+  display: none;
+
+  margin-bottom: 18px;
+  padding: 20px;
+
+  background: white;
+  border: 1px solid #e4dcfb;
+  border-radius: 13px;
+}
+
+.사용자폼.열림 {
+  display: block;
+}
+
+.사용자폼제목 {
+  margin-bottom: 16px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #40385f;
+}
+
+.사용자폼그리드 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .사용자폼그리드 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .사용자폼그리드 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.사용자폼필드 {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.사용자폼필드 label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #40385f;
+}
+
+.사용자폼필드 label .필수 {
+  color: #d93025;
+}
+
+.사용자폼필드 input,
+.사용자폼필드 select {
+  height: 42px;
+  padding: 0 12px;
+
+  border: 1px solid #ddd7ee;
+  border-radius: 8px;
+
+  background: white;
+  font-size: 13px;
+  outline: none;
+}
+
+.사용자폼필드 input:focus,
+.사용자폼필드 select:focus {
+  border-color: #8064d8;
+}
+
+.사용자폼필드 input:disabled {
+  background: #f6f4fa;
+  color: #9a93a8;
+}
+
+.사용자폼안내 {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #8b849d;
+  line-height: 1.5;
+}
+
+.사용자폼체크 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+}
+
+.사용자폼체크 input {
+  width: 18px;
+  height: 18px;
+}
+
+.사용자폼하단 {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+
+/* ================================================================
+   표
+   ================================================================ */
+
+.사용자표영역 {
+  background: white;
+  border: 1px solid #eeeaf5;
+  border-radius: 13px;
+  overflow: hidden;
+}
+
+.사용자표 {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.사용자표 thead th {
+  padding: 13px 14px;
+
+  background: #f6f2fe;
+  color: #5b5480;
+
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+
+  border-bottom: 1px solid #eeeaf5;
+  white-space: nowrap;
+
+  position: relative;
+
+  /* 리사이즈 핸들이 경계선을 넘어 좌우로 걸쳐지도록 */
+  overflow: visible;
+}
+
+.사용자표 thead th > .th_텍스트 {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.사용자표 thead th > .th_텍스트:hover {
+  color: #8064d8;
+}
+
+.사용자표 thead th:not(:last-child),
+.사용자표 tbody td:not(:last-child) {
+  border-right: 1px solid #8b849d;
+}
+
+.사용자표 tbody td {
+  padding: 12px 14px;
+
+  border-bottom: 1px solid #f4f1fb;
+  color: #40385f;
+
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.사용자표 tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.사용자표 tbody tr:hover {
+  background: #faf8fe;
+}
+
+.사용자표 .우 {
+  text-align: right;
+}
+
+.사용자표 .가운데 {
+  text-align: center;
+}
+
+.사용자표 tbody tr.본인행 {
+  background: #fbfaff;
+}
+
+
+/* ================================================================
+   링크 / 상태 표시
+   ================================================================ */
+
+.사용자링크 {
+  cursor: pointer;
+  color: #2563eb;
+  margin: 0 6px;
+}
+
+.사용자링크:hover {
+  color: #1d4ed8;
+}
+
+.사용자링크.중지 {
+  color: #c23b3b;
+}
+
+.사용자링크.중지:hover {
+  color: #a12f2f;
+}
+
+.사용자링크.비활성 {
+  color: #b8b0cc;
+  cursor: default;
+}
+
+.사용자링크.비활성:hover {
+  color: #b8b0cc;
+}
+
+.본인표시 {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+
+  border-radius: 999px;
+  background: #ede8fb;
+  color: #6a5fa0;
+
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.권한표시 {
+  font-weight: 700;
+}
+
+.권한표시.관리자 {
+  color: #6a4fc4;
+}
+
+.사용자안내 {
+  padding: 50px 20px;
+  text-align: center;
+  color: #a19bad;
+  font-size: 13px;
+}
+
+.사용자상태 {
+  min-height: 20px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.사용자상태.성공 {
+  color: #1f8a54;
+}
+
+.사용자상태.오류 {
+  color: #d93025;
+}
+
+
+/* ================================================================
+   관리 > 병원 관리 — 상세 카드
+   ================================================================ */
+
+.병원상태 {
+  min-height: 20px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.병원상태.성공 {
+  color: #1f8a54;
+}
+
+.병원상태.오류 {
+  color: #d93025;
+}
+
+.병원레이아웃 {
+  display: grid;
+
+  /* 좌우 7 : 3 비율. 오른쪽 열은 260px 아래로 줄어들지 않는다. */
+  grid-template-columns: minmax(0, 7fr) minmax(260px, 3fr);
+
+  gap: 16px;
+
+  /* 왼쪽 카드와 오른쪽 열의 위·아래 끝을 맞춘다 */
+  align-items: stretch;
+}
+
+@media (max-width: 1000px) {
+  .병원레이아웃 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.병원카드 {
+  background: white;
+  border: 1px solid #eeeaf5;
+  border-radius: 13px;
+  overflow: hidden;
+}
+
+.병원카드머리 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  padding: 16px 22px;
+
+  background: #f6f2fe;
+  border-bottom: 1px solid #eeeaf5;
+}
+
+.병원카드제목 {
+  font-size: 14px;
+  font-weight: 800;
+  color: #5b5480;
+}
+
+.병원카드버튼 {
+  display: flex;
+  gap: 8px;
+}
+
+.병원카드본문 {
+  padding: 6px 22px 14px;
+}
+
+.병원카드 .정보줄 {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+
+  min-height: 52px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f4f1fb;
+}
+
+.병원카드 .정보줄:last-child {
+  border-bottom: 0;
+}
+
+.병원카드 .정보라벨 {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8b849d;
+}
+
+.병원카드 .정보값 {
+  font-size: 14px;
+  color: #40385f;
+}
+
+.병원카드 .정보값.고정 {
+  color: #9a93a8;
+}
+
+.병원카드 .정보값 input {
+  width: 100%;
+  max-width: 420px;
+  height: 38px;
+  padding: 0 11px;
+
+  border: 1px solid #ddd7ee;
+  border-radius: 8px;
+
+  background: white;
+  font-size: 13px;
+  outline: none;
+}
+
+.병원카드 .정보값 input:focus {
+  border-color: #8064d8;
+}
+
+.병원카드 .필수 {
+  margin-left: 3px;
+  color: #d93025;
+}
+
+.병원카드 .필드안내 {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #8b849d;
+  line-height: 1.5;
+}
+
+.병원카드 .보조문구 {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #b8b0cc;
+}
+
+.병원카드꼬리 {
+  padding: 14px 22px;
+
+  background: #fbfaff;
+  border-top: 1px solid #f4f1fb;
+
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8b849d;
+}
+
+
+/* ================================================================
+   관리 > 병원 관리 — 병원 현황
+   ================================================================ */
+
+.현황열 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  /* 왼쪽 카드 높이에 맞춰 3개 카드가 균등 분할된다 */
+  height: 100%;
+}
+
+.현황카드 {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  flex: 1;
+  min-height: 92px;
+
+  padding: 18px 20px;
+
+  background: white;
+  border: 1px solid #eeeaf5;
+  border-radius: 13px;
+}
+
+.현황라벨 {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8b849d;
+}
+
+.현황숫자 {
+  margin-top: 8px;
+  font-size: 26px;
+  font-weight: 800;
+  color: #40385f;
+  line-height: 1.2;
+}
+
+.현황숫자.미연결 {
+  font-size: 17px;
+  color: #b8b0cc;
+}
+
+.현황보조 {
+  margin-top: 7px;
+  font-size: 11px;
+  color: #b8b0cc;
+}
+
+
+/* ================================================================
+   공용 — 표시/숨김 토글
+
+   도메인 선택자(.병원카드 .카드하단 등)보다 특이성이 낮아
+   무시되는 것을 막기 위해 !important를 사용한다.
+   ================================================================ */
+
+.숨김 {
+  display: none !important;
+}
+
+</style>

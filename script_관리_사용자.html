@@ -1,0 +1,956 @@
+<script>
+
+/* ================================================================
+   관리 > 사용자 관리 — 전역 상태
+   ================================================================ */
+
+let 사용자_원본목록 = [];
+let 사용자_현재표시목록 = [];
+
+let 사용자_정렬 = {
+  필드: null,
+  방향: 'asc'
+};
+
+const 사용자_권한옵션 = [
+  { 값: 'ADMIN', 이름: '관리자' },
+  { 값: 'STAFF', 이름: '직원' }
+];
+
+
+/* ================================================================
+   화면
+   ================================================================ */
+
+function 사용자관리화면() {
+
+  return `
+
+    <div class="사용자상단바">
+
+      <button
+        class="버튼 버튼주요"
+        onclick="사용자_등록폼열기()"
+      >
+        사용자 등록
+      </button>
+
+      <button
+        class="버튼 버튼보조"
+        onclick="사용자_목록불러오기()"
+      >
+        새로고침
+      </button>
+
+    </div>
+
+
+    <div class="사용자툴바">
+
+      <div class="필드">
+        <label>아이디</label>
+        <input
+          id="사용자검색_아이디"
+          type="text"
+          placeholder="아이디 검색"
+          onkeydown="사용자_검색_엔터(event)"
+        >
+      </div>
+
+      <div class="필드">
+        <label>이름</label>
+        <input
+          id="사용자검색_이름"
+          type="text"
+          placeholder="이름 검색"
+          onkeydown="사용자_검색_엔터(event)"
+        >
+      </div>
+
+      <div class="필드">
+        <label>권한</label>
+        <select id="사용자검색_권한" onchange="사용자_검색()">
+          <option value="all">전체</option>
+          <option value="ADMIN">관리자</option>
+          <option value="STAFF">직원</option>
+        </select>
+      </div>
+
+      <div class="필드">
+        <label>사용여부</label>
+        <select id="사용자검색_사용여부" onchange="사용자_검색()">
+          <option value="all">전체</option>
+          <option value="use">사용</option>
+          <option value="unuse">미사용</option>
+        </select>
+      </div>
+
+      <div class="툴바여백"></div>
+
+      <button
+        class="버튼 버튼주요 버튼작음"
+        onclick="사용자_검색()"
+      >
+        검색
+      </button>
+
+      <button
+        class="버튼 버튼보조 버튼작음"
+        onclick="사용자_검색초기화()"
+      >
+        초기화
+      </button>
+
+    </div>
+
+
+    <div id="사용자폼" class="사용자폼">
+
+      <div id="사용자폼제목" class="사용자폼제목">
+        사용자 등록
+      </div>
+
+      <input id="사용자_사용자ID" type="hidden">
+
+      <div class="사용자폼그리드">
+
+        <div class="사용자폼필드">
+          <label>아이디 <span class="필수">*</span></label>
+          <input
+            id="사용자_아이디"
+            type="text"
+            maxlength="20"
+            autocomplete="off"
+            placeholder="영문/숫자 3~20자"
+          >
+          <div class="사용자폼안내">
+            로그인에 사용합니다. 병원 내에서 중복될 수 없습니다.
+          </div>
+        </div>
+
+        <div class="사용자폼필드">
+          <label>이름 <span class="필수">*</span></label>
+          <input
+            id="사용자_이름"
+            type="text"
+            maxlength="30"
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="사용자폼필드">
+          <label>권한 <span class="필수">*</span></label>
+          <select id="사용자_권한">
+            <option value="STAFF">직원</option>
+            <option value="ADMIN">관리자</option>
+          </select>
+        </div>
+
+        <div class="사용자폼필드">
+          <label id="사용자_비밀번호라벨">
+            비밀번호 <span class="필수">*</span>
+          </label>
+          <input
+            id="사용자_비밀번호"
+            type="password"
+            maxlength="30"
+            autocomplete="new-password"
+          >
+          <div id="사용자_비밀번호안내" class="사용자폼안내">
+            4자 이상 입력해주세요.
+          </div>
+        </div>
+
+        <div class="사용자폼필드">
+          <label>사용여부</label>
+          <div class="사용자폼체크">
+            <input id="사용자_사용여부" type="checkbox" checked>
+            <span>사용</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="사용자폼하단">
+
+        <button
+          id="사용자저장버튼"
+          class="버튼 버튼주요"
+          onclick="사용자_저장()"
+        >
+          저장
+        </button>
+
+        <button
+          class="버튼 버튼보조"
+          onclick="사용자_폼닫기()"
+        >
+          취소
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <div id="사용자상태" class="사용자상태"></div>
+
+
+    <div class="사용자표영역">
+
+      <table class="사용자표" id="사용자표">
+
+        <colgroup>
+          <col style="width: 110px;">
+          <col style="width: 150px;">
+          <col style="width: 150px;">
+          <col style="width: 110px;">
+          <col style="width: 160px;">
+          <col style="width: 100px;">
+          <col style="width: 160px;">
+        </colgroup>
+
+        <thead>
+          <tr>
+            <th>
+              <span class="th_텍스트" onclick="사용자_정렬토글('사용자ID')">
+                사용자ID<span class="정렬표시" data-정렬="사용자ID"></span>
+              </span>
+              <span class="리사이즈핸들" data-col="0"></span>
+            </th>
+            <th>
+              <span class="th_텍스트" onclick="사용자_정렬토글('아이디')">
+                아이디<span class="정렬표시" data-정렬="아이디"></span>
+              </span>
+              <span class="리사이즈핸들" data-col="1"></span>
+            </th>
+            <th>
+              <span class="th_텍스트" onclick="사용자_정렬토글('이름')">
+                이름<span class="정렬표시" data-정렬="이름"></span>
+              </span>
+              <span class="리사이즈핸들" data-col="2"></span>
+            </th>
+            <th>
+              <span class="th_텍스트" onclick="사용자_정렬토글('권한')">
+                권한<span class="정렬표시" data-정렬="권한"></span>
+              </span>
+              <span class="리사이즈핸들" data-col="3"></span>
+            </th>
+            <th>
+              <span class="th_텍스트" onclick="사용자_정렬토글('마지막로그인')">
+                마지막로그인<span class="정렬표시" data-정렬="마지막로그인"></span>
+              </span>
+              <span class="리사이즈핸들" data-col="4"></span>
+            </th>
+            <th class="가운데">
+              <span class="th_텍스트" onclick="사용자_정렬토글('사용여부')">
+                사용여부<span class="정렬표시" data-정렬="사용여부"></span>
+              </span>
+              <span class="리사이즈핸들" data-col="5"></span>
+            </th>
+            <th class="가운데">
+              <span class="th_텍스트">관리</span>
+            </th>
+          </tr>
+        </thead>
+
+        <tbody id="사용자표본문">
+          <tr>
+            <td colspan="7">
+              <div class="사용자안내">불러오는 중입니다...</div>
+            </td>
+          </tr>
+        </tbody>
+
+      </table>
+
+    </div>
+
+  `;
+}
+
+
+/* ================================================================
+   목록 조회
+   ================================================================ */
+
+function 사용자_목록불러오기() {
+
+  사용자_상태표시('', '');
+
+  const tbody = document.getElementById('사용자표본문');
+
+  if (tbody) {
+    tbody.innerHTML =
+      '<tr><td colspan="7"><div class="사용자안내">불러오는 중입니다...</div></td></tr>';
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function(list) {
+
+      사용자_원본목록 = Array.isArray(list) ? list : [];
+
+      사용자_검색();
+
+    })
+
+    .withFailureHandler(function(error) {
+
+      사용자_상태표시(
+        (error && error.message) || '사용자 목록을 불러오지 못했습니다.',
+        '오류'
+      );
+
+      const tb = document.getElementById('사용자표본문');
+
+      if (tb) {
+        tb.innerHTML =
+          '<tr><td colspan="7"><div class="사용자안내">불러오기에 실패했습니다.</div></td></tr>';
+      }
+
+    })
+
+    .USER_getList(현재세션 ? 현재세션.token : '');
+}
+
+
+/* ================================================================
+   검색 (클라이언트 필터)
+   ================================================================ */
+
+function 사용자_검색() {
+
+  const 아이디값 =
+    (document.getElementById('사용자검색_아이디') || {}).value || '';
+
+  const 이름값 =
+    (document.getElementById('사용자검색_이름') || {}).value || '';
+
+  const 권한값 =
+    (document.getElementById('사용자검색_권한') || {}).value || 'all';
+
+  const 사용값 =
+    (document.getElementById('사용자검색_사용여부') || {}).value || 'all';
+
+  const 아이디 = 아이디값.trim().toLowerCase();
+  const 이름 = 이름값.trim().toLowerCase();
+
+  const 결과 = 사용자_원본목록.filter(function(user) {
+
+    const u아이디 = String(user.아이디 || '').toLowerCase();
+    const u이름 = String(user.이름 || '').toLowerCase();
+    const u권한 = String(user.권한 || '').toUpperCase();
+    const u사용 = 사용자_불린(user.사용여부);
+
+    if (아이디 && u아이디.indexOf(아이디) === -1) {
+      return false;
+    }
+
+    if (이름 && u이름.indexOf(이름) === -1) {
+      return false;
+    }
+
+    if (권한값 !== 'all' && u권한 !== 권한값) {
+      return false;
+    }
+
+    if (사용값 === 'use' && !u사용) {
+      return false;
+    }
+
+    if (사용값 === 'unuse' && u사용) {
+      return false;
+    }
+
+    return true;
+
+  });
+
+  사용자_테이블렌더(결과);
+}
+
+
+function 사용자_검색_엔터(event) {
+
+  if (event && event.key === 'Enter') {
+    사용자_검색();
+  }
+}
+
+
+function 사용자_검색초기화() {
+
+  const 아이디 = document.getElementById('사용자검색_아이디');
+  if (아이디) { 아이디.value = ''; }
+
+  const 이름 = document.getElementById('사용자검색_이름');
+  if (이름) { 이름.value = ''; }
+
+  const 권한 = document.getElementById('사용자검색_권한');
+  if (권한) { 권한.value = 'all'; }
+
+  const 사용 = document.getElementById('사용자검색_사용여부');
+  if (사용) { 사용.value = 'all'; }
+
+  사용자_테이블렌더(사용자_원본목록);
+}
+
+
+/* ================================================================
+   정렬
+   ================================================================ */
+
+function 사용자_정렬토글(필드) {
+
+  if (사용자_정렬.필드 === 필드) {
+    사용자_정렬.방향 = (사용자_정렬.방향 === 'asc') ? 'desc' : 'asc';
+  } else {
+    사용자_정렬.필드 = 필드;
+    사용자_정렬.방향 = 'asc';
+  }
+
+  사용자_테이블렌더(사용자_현재표시목록);
+}
+
+
+function 사용자_정렬적용(list) {
+
+  const 필드 = 사용자_정렬.필드;
+
+  if (!필드) {
+    return list;
+  }
+
+  const 방향 = (사용자_정렬.방향 === 'desc') ? -1 : 1;
+
+  return list.slice().sort(function(a, b) {
+
+    let av = a[필드];
+    let bv = b[필드];
+
+    if (필드 === '사용여부') {
+      av = 사용자_불린(av) ? 1 : 0;
+      bv = 사용자_불린(bv) ? 1 : 0;
+      return (av - bv) * 방향;
+    }
+
+    av = String(av == null ? '' : av).toLowerCase();
+    bv = String(bv == null ? '' : bv).toLowerCase();
+
+    if (av < bv) { return -1 * 방향; }
+    if (av > bv) { return 1 * 방향; }
+    return 0;
+
+  });
+}
+
+
+function 사용자_정렬표시갱신() {
+
+  const marks = document.querySelectorAll('.사용자표 .정렬표시');
+
+  for (let i = 0; i < marks.length; i++) {
+
+    const el = marks[i];
+    const 필드 = el.getAttribute('data-정렬');
+
+    if (필드 === 사용자_정렬.필드) {
+      el.textContent = (사용자_정렬.방향 === 'asc') ? '▲' : '▼';
+      el.classList.add('활성');
+    } else {
+      el.textContent = '';
+      el.classList.remove('활성');
+    }
+  }
+}
+
+
+/* ================================================================
+   테이블 렌더
+   ================================================================ */
+
+function 사용자_테이블렌더(list) {
+
+  사용자_현재표시목록 = Array.isArray(list) ? list : [];
+
+  const tbody = document.getElementById('사용자표본문');
+
+  if (!tbody) {
+    return;
+  }
+
+  const 정렬목록 = 사용자_정렬적용(사용자_현재표시목록);
+
+  if (!정렬목록 || 정렬목록.length === 0) {
+
+    tbody.innerHTML =
+      '<tr><td colspan="7"><div class="사용자안내">표시할 사용자가 없습니다.</div></td></tr>';
+
+    사용자_정렬표시갱신();
+
+    return;
+  }
+
+  tbody.innerHTML = 정렬목록.map(function(user) {
+
+    const 사용 = 사용자_불린(user.사용여부);
+    const 사용자ID = String(user.사용자ID || '');
+    const 권한 = String(user.권한 || '').toUpperCase();
+    const 본인 = user.본인여부 === true;
+
+    const 권한클래스 = (권한 === 'ADMIN') ? '권한표시 관리자' : '권한표시';
+
+    const 토글링크 = 본인
+      ? '<span class="사용자링크 비활성" title="본인 계정은 사용중지할 수 없습니다.">사용중지</span>'
+      : (사용
+          ? `<span class="사용자링크 중지" onclick="사용자_사용여부토글('${사용자_escapeAttr(사용자ID)}', false)">사용중지</span>`
+          : `<span class="사용자링크" onclick="사용자_사용여부토글('${사용자_escapeAttr(사용자ID)}', true)">사용재개</span>`);
+
+    return `
+      <tr class="${본인 ? '본인행' : ''}">
+        <td>${사용자_escape(사용자ID)}</td>
+        <td>${사용자_escape(user.아이디)}${본인 ? '<span class="본인표시">본인</span>' : ''}</td>
+        <td>${사용자_escape(user.이름)}</td>
+        <td><span class="${권한클래스}">${사용자_escape(사용자_권한명(권한))}</span></td>
+        <td>${사용자_escape(user.마지막로그인) || '-'}</td>
+        <td class="가운데">${사용 ? '사용' : '<span class="미사용텍스트">미사용</span>'}</td>
+        <td class="가운데">
+          <span
+            class="사용자링크"
+            onclick="사용자_수정폼열기('${사용자_escapeAttr(사용자ID)}')"
+          >수정</span>
+          ${토글링크}
+        </td>
+      </tr>
+    `;
+
+  }).join('');
+
+  사용자_정렬표시갱신();
+}
+
+
+/* ================================================================
+   등록 폼 열기
+   ================================================================ */
+
+function 사용자_등록폼열기() {
+
+  document.getElementById('사용자폼제목').textContent = '사용자 등록';
+
+  document.getElementById('사용자_사용자ID').value = '';
+  document.getElementById('사용자_아이디').value = '';
+  document.getElementById('사용자_아이디').disabled = false;
+  document.getElementById('사용자_이름').value = '';
+  document.getElementById('사용자_권한').value = 'STAFF';
+  document.getElementById('사용자_비밀번호').value = '';
+  document.getElementById('사용자_사용여부').checked = true;
+  document.getElementById('사용자_사용여부').disabled = false;
+
+  document.getElementById('사용자_비밀번호라벨').innerHTML =
+    '비밀번호 <span class="필수">*</span>';
+
+  document.getElementById('사용자_비밀번호안내').textContent =
+    '4자 이상 입력해주세요.';
+
+  사용자_상태표시('', '');
+
+  document.getElementById('사용자폼').classList.add('열림');
+
+  document.getElementById('사용자_아이디').focus();
+}
+
+
+/* ================================================================
+   수정 폼 열기
+   ================================================================ */
+
+function 사용자_수정폼열기(사용자ID) {
+
+  const user = 사용자_원본목록.filter(function(x) {
+    return String(x.사용자ID) === String(사용자ID);
+  })[0];
+
+  if (!user) {
+    사용자_상태표시('수정할 사용자를 찾을 수 없습니다.', '오류');
+    return;
+  }
+
+  document.getElementById('사용자폼제목').textContent = '사용자 수정';
+
+  document.getElementById('사용자_사용자ID').value = String(user.사용자ID || '');
+  document.getElementById('사용자_아이디').value = String(user.아이디 || '');
+  document.getElementById('사용자_아이디').disabled = false;
+  document.getElementById('사용자_이름').value = String(user.이름 || '');
+  document.getElementById('사용자_권한').value =
+    (String(user.권한 || '').toUpperCase() === 'ADMIN') ? 'ADMIN' : 'STAFF';
+  document.getElementById('사용자_비밀번호').value = '';
+  document.getElementById('사용자_사용여부').checked = 사용자_불린(user.사용여부);
+
+  // 본인 계정은 사용여부 해제 불가
+  document.getElementById('사용자_사용여부').disabled = (user.본인여부 === true);
+
+  document.getElementById('사용자_비밀번호라벨').innerHTML = '비밀번호';
+
+  document.getElementById('사용자_비밀번호안내').textContent =
+    '변경할 때만 입력하세요. 비워두면 기존 비밀번호가 유지됩니다.';
+
+  사용자_상태표시('', '');
+
+  document.getElementById('사용자폼').classList.add('열림');
+
+  document.getElementById('사용자_이름').focus();
+}
+
+
+/* ================================================================
+   폼 닫기
+   ================================================================ */
+
+function 사용자_폼닫기() {
+
+  document.getElementById('사용자폼').classList.remove('열림');
+}
+
+
+/* ================================================================
+   저장 (등록 / 수정)
+   ================================================================ */
+
+function 사용자_저장() {
+
+  const 사용자ID = document.getElementById('사용자_사용자ID').value.trim();
+  const 아이디 = document.getElementById('사용자_아이디').value.trim();
+  const 이름 = document.getElementById('사용자_이름').value.trim();
+  const 권한 = document.getElementById('사용자_권한').value;
+  const 비밀번호 = document.getElementById('사용자_비밀번호').value;
+  const 사용여부 = document.getElementById('사용자_사용여부').checked;
+
+  if (!아이디) {
+    사용자_상태표시('아이디를 입력해주세요.', '오류');
+    document.getElementById('사용자_아이디').focus();
+    return;
+  }
+
+  if (!이름) {
+    사용자_상태표시('이름을 입력해주세요.', '오류');
+    document.getElementById('사용자_이름').focus();
+    return;
+  }
+
+  if (!사용자ID && !비밀번호) {
+    사용자_상태표시('신규 등록 시 비밀번호는 필수입니다.', '오류');
+    document.getElementById('사용자_비밀번호').focus();
+    return;
+  }
+
+  if (비밀번호 && 비밀번호.length < 4) {
+    사용자_상태표시('비밀번호는 4자 이상으로 입력해주세요.', '오류');
+    document.getElementById('사용자_비밀번호').focus();
+    return;
+  }
+
+  const data = {
+    아이디: 아이디,
+    이름: 이름,
+    권한: 권한,
+    사용여부: 사용여부,
+    비밀번호: 비밀번호
+  };
+
+  if (사용자ID) {
+    data.사용자ID = 사용자ID;
+  }
+
+  const 저장버튼 = document.getElementById('사용자저장버튼');
+
+  저장버튼.disabled = true;
+  저장버튼.textContent = '저장 중...';
+
+  google.script.run
+
+    .withSuccessHandler(function(message) {
+
+      저장버튼.disabled = false;
+      저장버튼.textContent = '저장';
+
+      사용자_폼닫기();
+
+      사용자_상태표시(String(message || '저장되었습니다.'), '성공');
+
+      사용자_목록불러오기();
+
+    })
+
+    .withFailureHandler(function(error) {
+
+      저장버튼.disabled = false;
+      저장버튼.textContent = '저장';
+
+      사용자_상태표시(
+        (error && error.message) || '저장에 실패했습니다.',
+        '오류'
+      );
+
+    })
+
+    .USER_save(현재세션 ? 현재세션.token : '', data);
+}
+
+
+/* ================================================================
+   사용여부 토글 (논리 삭제 / 복구)
+   ================================================================ */
+
+function 사용자_사용여부토글(사용자ID, 다음값) {
+
+  const id = String(사용자ID || '').trim();
+
+  if (!id) {
+    return;
+  }
+
+  const user = 사용자_원본목록.filter(function(x) {
+    return String(x.사용자ID) === id;
+  })[0];
+
+  const 표시 = user
+    ? (id + ' / ' + String(user.아이디 || '') + ' / ' + String(user.이름 || ''))
+    : id;
+
+  const 문구 = 다음값
+    ? '다음 사용자를 다시 사용 상태로 변경하시겠습니까?\n\n'
+    : '다음 사용자를 사용중지 처리하시겠습니까?\n로그인이 차단되며, 데이터는 삭제되지 않습니다.\n\n';
+
+  if (!window.confirm(문구 + 표시)) {
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function(message) {
+
+      사용자_상태표시(String(message || '변경되었습니다.'), '성공');
+
+      사용자_목록불러오기();
+
+    })
+
+    .withFailureHandler(function(error) {
+
+      사용자_상태표시(
+        (error && error.message) || '변경에 실패했습니다.',
+        '오류'
+      );
+
+    })
+
+    .USER_사용여부변경(현재세션 ? 현재세션.token : '', id, 다음값);
+}
+
+
+/* ================================================================
+   유틸
+   ================================================================ */
+
+function 사용자_상태표시(message, type) {
+
+  const el = document.getElementById('사용자상태');
+
+  if (!el) {
+    return;
+  }
+
+  el.textContent = message || '';
+
+  el.className = '사용자상태';
+
+  if (type === '성공') {
+    el.classList.add('성공');
+  } else if (type === '오류') {
+    el.classList.add('오류');
+  }
+}
+
+
+function 사용자_권한명(권한) {
+
+  const v = String(권한 || '').toUpperCase();
+
+  for (let i = 0; i < 사용자_권한옵션.length; i++) {
+    if (사용자_권한옵션[i].값 === v) {
+      return 사용자_권한옵션[i].이름;
+    }
+  }
+
+  return v || '-';
+}
+
+
+function 사용자_불린(값) {
+
+  if (값 === true) {
+    return true;
+  }
+
+  if (값 === false) {
+    return false;
+  }
+
+  const s = String(값 == null ? '' : 값).trim().toLowerCase();
+
+  if (s === 'false' || s === '' || s === '0' || s === '미사용') {
+    return false;
+  }
+
+  return true;
+}
+
+
+function 사용자_escape(값) {
+
+  return String(값 == null ? '' : 값)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+function 사용자_escapeAttr(값) {
+
+  return 사용자_escape(값).replace(/'/g, '&#39;');
+}
+
+
+/* ================================================================
+   표 컬럼 리사이즈 (localStorage 저장)
+   ================================================================ */
+
+const 사용자표_저장키 = '사용자표_컬럼너비_v1';
+
+
+function 사용자표_컬럼너비불러오기() {
+
+  try {
+
+    const raw = localStorage.getItem(사용자표_저장키);
+
+    if (!raw) {
+      return;
+    }
+
+    const 너비 = JSON.parse(raw);
+
+    if (!Array.isArray(너비)) {
+      return;
+    }
+
+    const cols = document.querySelectorAll('#사용자표 colgroup col');
+
+    for (let i = 0; i < cols.length && i < 너비.length; i++) {
+      if (너비[i]) {
+        cols[i].style.width = 너비[i] + 'px';
+      }
+    }
+
+  } catch (e) {
+    // 저장값이 손상된 경우 무시하고 기본 너비 사용
+  }
+}
+
+
+function 사용자표_컬럼너비저장() {
+
+  try {
+
+    const cols = document.querySelectorAll('#사용자표 colgroup col');
+
+    const 너비 = [];
+
+    for (let i = 0; i < cols.length; i++) {
+      너비.push(parseInt(cols[i].style.width, 10) || 0);
+    }
+
+    localStorage.setItem(사용자표_저장키, JSON.stringify(너비));
+
+  } catch (e) {
+    // 저장 실패는 기능에 영향 없음
+  }
+}
+
+
+function 사용자표_컬럼리사이즈초기화() {
+
+  사용자표_컬럼너비불러오기();
+
+  const handles = document.querySelectorAll('#사용자표 .리사이즈핸들');
+
+  if (!handles.length) {
+    return;
+  }
+
+  const cols = document.querySelectorAll('#사용자표 colgroup col');
+
+  let 대상col = null;
+  let 시작X = 0;
+  let 시작너비 = 0;
+
+  function 이동(ev) {
+
+    if (!대상col) {
+      return;
+    }
+
+    const 다음 = 시작너비 + (ev.clientX - 시작X);
+
+    대상col.style.width = Math.max(60, 다음) + 'px';
+  }
+
+  function 종료() {
+
+    if (!대상col) {
+      return;
+    }
+
+    대상col = null;
+
+    document.body.classList.remove('리사이즈중');
+
+    document.removeEventListener('mousemove', 이동);
+    document.removeEventListener('mouseup', 종료);
+
+    사용자표_컬럼너비저장();
+  }
+
+  for (let i = 0; i < handles.length; i++) {
+
+    handles[i].addEventListener('mousedown', function(ev) {
+
+      const idx = parseInt(this.getAttribute('data-col'), 10);
+
+      if (isNaN(idx) || !cols[idx]) {
+        return;
+      }
+
+      대상col = cols[idx];
+      시작X = ev.clientX;
+
+      시작너비 =
+        parseInt(대상col.style.width, 10) ||
+        document.querySelectorAll('#사용자표 thead th')[idx].offsetWidth;
+
+      document.body.classList.add('리사이즈중');
+
+      document.addEventListener('mousemove', 이동);
+      document.addEventListener('mouseup', 종료);
+
+      ev.preventDefault();
+      ev.stopPropagation();
+
+    });
+  }
+}
+
+</script>
