@@ -1,0 +1,467 @@
+<style>
+    /* ================================================================
+       품목 관리
+       ================================================================ */
+
+    .품목상단바 {
+
+      display: flex;
+      justify-content: flex-end;
+
+      gap: 10px;
+
+      margin-bottom: 14px;
+    }
+
+    .품목툴바 {
+
+      display: flex;
+      align-items: flex-end;
+      flex-wrap: wrap;
+
+      gap: 10px;
+
+      margin-bottom: 18px;
+
+      padding: 16px 18px;
+
+      background: white;
+
+      border: 1px solid #eeeaf5;
+      border-radius: 13px;
+    }
+
+    .품목툴바 .필드 {
+
+      display: flex;
+      flex-direction: column;
+
+      gap: 5px;
+    }
+
+    .품목툴바 .필드 label {
+
+      font-size: 11px;
+      font-weight: 700;
+
+      color: #8b849d;
+    }
+
+    .품목툴바 input,
+    .품목툴바 select {
+
+      height: 40px;
+
+      padding: 0 11px;
+
+      border: 1px solid #ddd7ee;
+      border-radius: 8px;
+
+      background: white;
+
+      font-size: 13px;
+
+      outline: none;
+    }
+
+    .품목툴바 input:focus,
+    .품목툴바 select:focus {
+
+      border-color: #8064d8;
+    }
+
+    .품목툴바 .툴바여백 {
+      flex: 1;
+    }
+
+    .버튼 {
+
+      height: 40px;
+
+      padding: 0 16px;
+
+      border: 0;
+      border-radius: 8px;
+
+      font-size: 13px;
+      font-weight: 700;
+
+      cursor: pointer;
+    }
+
+    .버튼주요 {
+      background: #8064d8;
+      color: white;
+    }
+
+    .버튼주요:hover {
+      background: #7053ca;
+    }
+
+    .버튼보조 {
+      background: #f0ecfa;
+      color: #6a5fa0;
+    }
+
+    .버튼보조:hover {
+      background: #e6dffa;
+    }
+
+    .버튼삭제 {
+      background: #fbe8e8;
+      color: #c23b3b;
+    }
+
+    .버튼삭제:hover {
+      background: #f7dada;
+    }
+
+    .버튼작음 {
+
+      height: 32px;
+
+      padding: 0 12px;
+
+      font-size: 12px;
+
+      border-radius: 7px;
+    }
+
+
+    /* ================================================================
+       품목 등록/수정 폼
+       ================================================================ */
+
+    .품목폼 {
+
+      display: none;
+
+      margin-bottom: 18px;
+
+      padding: 20px;
+
+      background: white;
+
+      border: 1px solid #e4dcfb;
+      border-radius: 13px;
+    }
+
+    .품목폼.열림 {
+      display: block;
+    }
+
+    .품목폼제목 {
+
+      margin-bottom: 16px;
+
+      font-size: 15px;
+      font-weight: 800;
+
+      color: #40385f;
+    }
+
+    .품목폼그리드 {
+
+      display: grid;
+
+      grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+
+      gap: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .품목폼그리드 {
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 600px) {
+      .품목폼그리드 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .품목폼필드 {
+
+      display: flex;
+      flex-direction: column;
+
+      gap: 6px;
+    }
+
+    .품목폼필드 label {
+
+      font-size: 12px;
+      font-weight: 700;
+
+      color: #40385f;
+    }
+
+    .품목폼필드 label .필수 {
+      color: #d93025;
+    }
+
+    .품목폼필드 input {
+
+      height: 42px;
+
+      padding: 0 12px;
+
+      border: 1px solid #ddd7ee;
+      border-radius: 8px;
+
+      font-size: 13px;
+
+      outline: none;
+    }
+
+    .품목폼필드 input:focus {
+      border-color: #8064d8;
+    }
+
+    .품목폼체크 {
+
+      display: flex;
+      align-items: center;
+
+      gap: 8px;
+
+      height: 42px;
+    }
+
+    .품목폼체크 input {
+
+      width: 18px;
+      height: 18px;
+    }
+
+    .품목폼하단 {
+
+      display: flex;
+
+      gap: 10px;
+
+      margin-top: 18px;
+    }
+
+
+    /* ================================================================
+       품목 테이블
+       ================================================================ */
+
+    .품목표영역 {
+
+      background: white;
+
+      border: 1px solid #eeeaf5;
+      border-radius: 13px;
+
+      overflow: hidden;
+    }
+
+    .품목표 {
+
+      width: 100%;
+
+      border-collapse: collapse;
+
+      font-size: 13px;
+
+      table-layout: fixed;
+    }
+
+    .품목표 thead th {
+
+      padding: 13px 14px;
+
+      background: #f6f2fe;
+
+      color: #5b5480;
+
+      font-size: 12px;
+      font-weight: 800;
+
+      text-align: left;
+
+      border-bottom: 1px solid #eeeaf5;
+
+      white-space: nowrap;
+
+      position: relative;
+
+      /* 리사이즈 핸들이 경계선을 넘어 좌우로 걸쳐지도록 overflow:visible */
+      overflow: visible;
+    }
+
+    /* 헤더 텍스트 자체는 안쪽 span에서 말줄임 처리
+       + 정렬 클릭 대상. 리사이즈 핸들과 별도라 상호간섭 없음. */
+    .품목표 thead th > .th_텍스트 {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .품목표 thead th > .th_텍스트:hover {
+      color: #8064d8;
+    }
+
+    /* 정렬 방향 표시
+       - 기본(비활성): 회색 옅은 ⇅ 아이콘 (항상 표시, 정렬 가능 힌트)
+       - 활성 오름차순: 진한 보라 ▲
+       - 활성 내림차순: 진한 보라 ▼ */
+    .정렬표시 {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 10px;
+      vertical-align: middle;
+      color: #b8b0cc;
+    }
+
+    .정렬표시.활성 {
+      color: #8064d8;
+      font-weight: 700;
+    }
+
+    /* 컬럼 구분 실선 (항상 보이는 세로선, 열 경계에 위치)
+       헤더/본문 모두 동일한 두께·색상으로 통일 */
+    .품목표 thead th:not(:last-child),
+    .품목표 tbody td:not(:last-child) {
+      border-right: 1px solid #8b849d;
+    }
+
+    .품목표 tbody td {
+
+      padding: 12px 14px;
+
+      border-bottom: 1px solid #f4f1fb;
+
+      color: #40385f;
+
+      vertical-align: middle;
+
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 컬럼 리사이즈 핸들
+       - 열 경계선(border-right) 정중앙에 위치
+       - 폭 14px, 경계선 기준 좌우 7px씩 걸침
+       - 배경 완전 투명, cursor만 col-resize
+       - 검은 세로선은 th의 border-right가 그대로 표시 */
+    .리사이즈핸들 {
+      position: absolute;
+      top: 0;
+      right: -7px;
+      width: 14px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none;
+      z-index: 3;
+      background: transparent;
+    }
+
+    body.리사이즈중 {
+      cursor: col-resize !important;
+      user-select: none;
+    }
+    body.리사이즈중 * {
+      cursor: col-resize !important;
+      user-select: none !important;
+    }
+
+    .품목표 tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .품목표 tbody tr:hover {
+      background: #faf8fe;
+    }
+
+    .품목표 .우 {
+      text-align: right;
+    }
+
+    .품목표 .가운데 {
+      text-align: center;
+    }
+
+    .품목링크 {
+      cursor: pointer;
+      color: #2563eb;
+      margin: 0 6px;
+    }
+
+    .품목링크:hover {
+      color: #1d4ed8;
+    }
+
+    .미사용텍스트 {
+      color: #d92d20;
+      font-weight: 700;
+    }
+
+    .사용뱃지 {
+
+      display: inline-block;
+
+      padding: 3px 10px;
+
+      border-radius: 999px;
+
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .사용뱃지.사용 {
+      background: #e5f4ec;
+      color: #1f8a54;
+    }
+
+    .사용뱃지.미사용 {
+      background: #f0eef3;
+      color: #9a93a8;
+    }
+
+    .품목행버튼 {
+
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .품목안내 {
+
+      padding: 50px 20px;
+
+      text-align: center;
+
+      color: #a19bad;
+
+      font-size: 13px;
+    }
+
+    .품목상태 {
+
+      min-height: 20px;
+
+      margin-bottom: 12px;
+
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .품목상태.성공 {
+      color: #1f8a54;
+    }
+
+    .품목상태.오류 {
+      color: #d93025;
+    }
+
+
+</style>

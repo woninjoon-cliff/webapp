@@ -1,0 +1,248 @@
+<!-- ================================================================
+       실제 앱
+       ================================================================ -->
+
+  <div
+    id="앱화면"
+    class="앱화면"
+  >
+
+
+    <!-- ==============================================================
+         사이드바
+         ============================================================== -->
+
+    <aside class="사이드바">
+
+
+      <div class="사이드바브랜드">
+
+        <div class="main">
+          VIVICELLLAB
+        </div>
+
+        <div class="sub">
+          ERP
+        </div>
+
+      </div>
+
+
+      <div class="사이드바병원">
+
+        <div
+          id="사이드바병원명"
+          class="name"
+        >
+          -
+        </div>
+
+      </div>
+
+
+      <div class="메뉴영역">
+
+
+        <button
+          class="메뉴버튼 active"
+          data-page="dashboard"
+          onclick="페이지이동('dashboard')"
+        >
+          대시보드
+        </button>
+
+
+        <div class="메뉴그룹" data-group="procedure">
+          <button
+            class="메뉴버튼 그룹상위"
+            onclick="그룹토글('procedure')"
+          >
+            <span>시술</span>
+            <span class="그룹화살표">&#9654;</span>
+          </button>
+          <div class="하위목록">
+            <button class="하위버튼" data-page="procedure_main" onclick="페이지이동('procedure_main')">시술 메인</button>
+            <button class="하위버튼" data-page="procedure_normal" onclick="페이지이동('procedure_normal')">일반 시술</button>
+            <button class="하위버튼" data-page="procedure_membership" onclick="페이지이동('procedure_membership')">회원권 시술</button>
+            <button class="하위버튼" data-page="procedure_free" onclick="페이지이동('procedure_free')">체험단 및 무료 시술</button>
+            <button class="하위버튼" data-page="procedure_multi" onclick="페이지이동('procedure_multi')">다회차 관리</button>
+          </div>
+        </div>
+
+
+        <div class="메뉴그룹" data-group="purchase">
+          <button
+            class="메뉴버튼 그룹상위"
+            onclick="그룹토글('purchase')"
+          >
+            <span>구매</span>
+            <span class="그룹화살표">&#9654;</span>
+          </button>
+          <div class="하위목록">
+            <button class="하위버튼" data-page="purchase_main" onclick="페이지이동('purchase_main')">구매 메인</button>
+            <button class="하위버튼" data-page="purchase_order" onclick="페이지이동('purchase_order')">발주</button>
+            <button class="하위버튼" data-page="purchase_receive" onclick="페이지이동('purchase_receive')">입고</button>
+            <button class="하위버튼" data-page="purchase_history" onclick="페이지이동('purchase_history')">발주/입고 이력</button>
+            <button class="하위버튼" data-page="purchase_vendor" onclick="페이지이동('purchase_vendor')">거래처</button>
+            <button class="하위버튼" data-page="purchase_unpaid" onclick="페이지이동('purchase_unpaid')">미지급 관리</button>
+          </div>
+        </div>
+
+
+        <div class="메뉴그룹" data-group="inventory">
+          <button
+            class="메뉴버튼 그룹상위"
+            onclick="그룹토글('inventory')"
+          >
+            <span>재고</span>
+            <span class="그룹화살표">&#9654;</span>
+          </button>
+          <div class="하위목록">
+            <button class="하위버튼" data-page="inventory_main" onclick="페이지이동('inventory_main')">재고 메인</button>
+            <button class="하위버튼" data-page="inventory_current" onclick="페이지이동('inventory_current')">현재고</button>
+            <button class="하위버튼" data-page="inventory_use" onclick="페이지이동('inventory_use')">사용등록</button>
+            <button class="하위버튼" data-page="inventory_adjust" onclick="페이지이동('inventory_adjust')">재고 조정</button>
+            <button class="하위버튼" data-page="inventory_close" onclick="페이지이동('inventory_close')">마감 관리</button>
+          </div>
+        </div>
+
+
+        <div class="메뉴그룹" data-group="statistics">
+          <button
+            class="메뉴버튼 그룹상위"
+            onclick="그룹토글('statistics')"
+          >
+            <span>통계</span>
+            <span class="그룹화살표">&#9654;</span>
+          </button>
+          <div class="하위목록">
+            <button class="하위버튼" data-page="stats_sales" onclick="페이지이동('stats_sales')">매출 통계</button>
+            <button class="하위버튼" data-page="stats_cost" onclick="페이지이동('stats_cost')">원가 통계</button>
+            <button class="하위버튼" data-page="stats_profit" onclick="페이지이동('stats_profit')">이익 통계</button>
+          </div>
+        </div>
+
+
+        <div class="메뉴그룹" data-group="management">
+          <button
+            class="메뉴버튼 그룹상위"
+            onclick="그룹토글('management')"
+          >
+            <span>관리</span>
+            <span class="그룹화살표">&#9654;</span>
+          </button>
+          <div class="하위목록">
+            <button class="하위버튼" data-page="mgmt_hospital" onclick="페이지이동('mgmt_hospital')">병원 관리</button>
+            <button class="하위버튼" data-page="mgmt_user" onclick="페이지이동('mgmt_user')">사용자 관리</button>
+            <button class="하위버튼" data-page="item" onclick="페이지이동('item')">품목 관리</button>
+            <button class="하위버튼" data-page="mgmt_cost" onclick="페이지이동('mgmt_cost')">원가 기준</button>
+            <button class="하위버튼" data-page="mgmt_vendor_info" onclick="페이지이동('mgmt_vendor_info')">거래처/기본정보</button>
+          </div>
+        </div>
+
+
+      </div>
+
+
+      <div class="사이드바하단">
+
+
+        <div class="사용자정보">
+
+          <div
+            id="사이드바사용자명"
+            class="name"
+          >
+            -
+          </div>
+
+          <div
+            id="사이드바사용자권한"
+            class="role"
+          >
+            -
+          </div>
+
+        </div>
+
+
+        <button
+          class="로그아웃버튼"
+          onclick="로그아웃()"
+        >
+          로그아웃
+        </button>
+
+
+      </div>
+
+
+    </aside>
+
+
+
+    <!-- ==============================================================
+         메인
+         ============================================================== -->
+
+    <main class="메인영역">
+
+
+      <header class="상단바">
+
+
+        <div>
+
+          <div
+            id="페이지제목"
+            class="페이지제목"
+          >
+            대시보드
+          </div>
+
+          <div
+            id="페이지설명"
+            class="페이지설명"
+          >
+            통합관리 시스템 현황
+          </div>
+
+        </div>
+
+
+        <div class="상단사용자">
+
+          <div
+            id="상단병원명"
+            class="상단병원"
+          >
+            -
+          </div>
+
+          <div
+            id="상단사용자명"
+            class="상단이름"
+          >
+            -
+          </div>
+
+        </div>
+
+
+      </header>
+
+
+      <section
+        id="콘텐츠"
+        class="콘텐츠"
+      >
+
+        <!-- JavaScript에서 페이지를 출력 -->
+
+      </section>
+
+
+    </main>
+
+
+  </div>

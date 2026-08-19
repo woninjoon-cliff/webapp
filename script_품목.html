@@ -1,0 +1,970 @@
+<script>
+  /* ================================================================
+     품목 관리 - 화면
+     ================================================================ */
+
+  function 품목관리화면() {
+
+    return `
+
+      <div class="품목상단바">
+
+        <button
+          class="버튼 버튼주요"
+          onclick="품목_등록폼열기()"
+        >
+          품목 등록
+        </button>
+
+        <button
+          class="버튼 버튼보조"
+          onclick="품목_목록불러오기()"
+        >
+          새로고침
+        </button>
+
+      </div>
+
+
+      <div class="품목툴바">
+
+        <div class="필드">
+          <label>품목명</label>
+          <input
+            id="품목검색_품목명"
+            type="text"
+            placeholder="품목명 검색"
+            onkeydown="품목_검색_엔터(event)"
+          >
+        </div>
+
+        <div class="필드">
+          <label>분류</label>
+          <input
+            id="품목검색_분류"
+            type="text"
+            placeholder="분류 검색"
+            onkeydown="품목_검색_엔터(event)"
+          >
+        </div>
+
+        <div class="필드">
+          <label>사용여부</label>
+          <select id="품목검색_사용여부">
+            <option value="all">전체</option>
+            <option value="use">사용</option>
+            <option value="unuse">미사용</option>
+          </select>
+        </div>
+
+        <button
+          class="버튼 버튼주요"
+          onclick="품목_검색()"
+        >
+          검색
+        </button>
+
+        <button
+          class="버튼 버튼보조"
+          onclick="품목_검색초기화()"
+        >
+          초기화
+        </button>
+
+      </div>
+
+
+      <div
+        id="품목폼"
+        class="품목폼"
+      >
+
+        <div
+          id="품목폼제목"
+          class="품목폼제목"
+        >
+          품목 등록
+        </div>
+
+        <input
+          id="품목_품목ID"
+          type="hidden"
+        >
+
+        <div class="품목폼그리드">
+
+          <div class="품목폼필드">
+            <label>분류</label>
+            <input id="품목_분류" type="text" placeholder="분류 (예: 필러, 주사제, 소모품)">
+          </div>
+
+          <div class="품목폼필드">
+            <label>품목명 <span class="필수">*</span></label>
+            <input id="품목_품목명" type="text" placeholder="품목명">
+          </div>
+
+          <div class="품목폼필드">
+            <label>단위</label>
+            <input id="품목_단위" type="text" placeholder="단위 (예: EA)">
+          </div>
+
+          <div class="품목폼필드">
+            <label>규격</label>
+            <input id="품목_규격" type="text" placeholder="규격 (예: 2CC, 10CC, 100U)">
+          </div>
+
+          <div class="품목폼필드">
+            <label>사용여부</label>
+            <div class="품목폼체크">
+              <input id="품목_사용여부" type="checkbox" checked>
+              <span>사용</span>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="품목폼하단">
+
+          <button
+            id="품목저장버튼"
+            class="버튼 버튼주요"
+            onclick="품목_저장()"
+          >
+            저장
+          </button>
+
+          <button
+            class="버튼 버튼보조"
+            onclick="품목_폼닫기()"
+          >
+            취소
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <div
+        id="품목상태"
+        class="품목상태"
+      ></div>
+
+
+      <div class="품목표영역">
+
+        <table class="품목표">
+
+          <colgroup>
+            <col data-key="품목ID">
+            <col data-key="분류">
+            <col data-key="품목명">
+            <col data-key="단위">
+            <col data-key="규격">
+            <col data-key="사용여부">
+            <col data-key="관리">
+          </colgroup>
+
+          <thead>
+            <tr>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('품목ID')">품목ID<span class="정렬표시" data-key="품목ID">&#8645;</span></span><span class="리사이즈핸들" data-col="0"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('분류')">분류<span class="정렬표시" data-key="분류">&#8645;</span></span><span class="리사이즈핸들" data-col="1"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('품목명')">품목명<span class="정렬표시" data-key="품목명">&#8645;</span></span><span class="리사이즈핸들" data-col="2"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('단위')">단위<span class="정렬표시" data-key="단위">&#8645;</span></span><span class="리사이즈핸들" data-col="3"></span></th>
+              <th><span class="th_텍스트" onclick="품목_정렬토글('규격')">규격<span class="정렬표시" data-key="규격">&#8645;</span></span><span class="리사이즈핸들" data-col="4"></span></th>
+              <th class="가운데"><span class="th_텍스트" onclick="품목_정렬토글('사용여부')">사용여부<span class="정렬표시" data-key="사용여부">&#8645;</span></span><span class="리사이즈핸들" data-col="5"></span></th>
+              <th class="가운데"><span class="th_텍스트" style="cursor:default">관리</span></th>
+            </tr>
+          </thead>
+
+          <tbody id="품목표본문">
+            <tr>
+              <td colspan="7">
+                <div class="품목안내">
+                  불러오는 중입니다...
+                </div>
+              </td>
+            </tr>
+          </tbody>
+
+        </table>
+
+      </div>
+
+    `;
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 목록 조회
+     ================================================================ */
+
+  function 품목_목록불러오기() {
+
+    품목_상태표시('', '');
+
+    const tbody =
+      document.getElementById('품목표본문');
+
+    if (tbody) {
+      tbody.innerHTML =
+        '<tr><td colspan="7"><div class="품목안내">불러오는 중입니다...</div></td></tr>';
+    }
+
+
+    google.script.run
+
+      .withSuccessHandler(
+        function(list) {
+
+          품목_원본목록 =
+            Array.isArray(list) ? list : [];
+
+          품목_테이블렌더(품목_원본목록);
+
+        }
+      )
+
+      .withFailureHandler(
+        function(error) {
+
+          품목_상태표시(
+            (error && error.message) ||
+            '품목 목록을 불러오지 못했습니다.',
+            '오류'
+          );
+
+          const tb =
+            document.getElementById('품목표본문');
+
+          if (tb) {
+            tb.innerHTML =
+              '<tr><td colspan="7"><div class="품목안내">불러오기에 실패했습니다.</div></td></tr>';
+          }
+
+        }
+      )
+
+      .ITEM_getList(
+        현재세션 ? 현재세션.token : ''
+      );
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 검색(클라이언트 필터)
+     ================================================================ */
+
+  function 품목_검색() {
+
+    const 이름값 =
+      (document.getElementById('품목검색_품목명') || {}).value || '';
+
+    const 분류값 =
+      (document.getElementById('품목검색_분류') || {}).value || '';
+
+    const 사용값 =
+      (document.getElementById('품목검색_사용여부') || {}).value || 'all';
+
+
+    const 이름 = 이름값.trim().toLowerCase();
+    const 분류 = 분류값.trim().toLowerCase();
+
+
+    const 결과 =
+      품목_원본목록.filter(function(item) {
+
+        const 품목명 =
+          String(item.품목명 || '').toLowerCase();
+
+        const 품목분류 =
+          String(item.분류 || '').toLowerCase();
+
+        const 사용 =
+          품목_사용여부불린(item.사용여부);
+
+
+        if (이름 && 품목명.indexOf(이름) === -1) {
+          return false;
+        }
+
+        if (분류 && 품목분류.indexOf(분류) === -1) {
+          return false;
+        }
+
+        if (사용값 === 'use' && !사용) {
+          return false;
+        }
+
+        if (사용값 === 'unuse' && 사용) {
+          return false;
+        }
+
+        return true;
+
+      });
+
+
+    품목_테이블렌더(결과);
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 검색(엔터) / 초기화
+     ================================================================ */
+
+  function 품목_검색_엔터(event) {
+
+    if (event && event.key === 'Enter') {
+      품목_검색();
+    }
+
+  }
+
+
+  function 품목_검색초기화() {
+
+    const 이름 =
+      document.getElementById('품목검색_품목명');
+    if (이름) { 이름.value = ''; }
+
+    const 분류 =
+      document.getElementById('품목검색_분류');
+    if (분류) { 분류.value = ''; }
+
+    const 사용 =
+      document.getElementById('품목검색_사용여부');
+    if (사용) { 사용.value = 'all'; }
+
+    품목_테이블렌더(품목_원본목록);
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 테이블 렌더
+     ================================================================ */
+
+  function 품목_테이블렌더(list) {
+
+    // 검색/필터 결과를 저장해두고, 정렬 상태에 맞게 재렌더 가능하게 함
+    품목_현재표시목록 = list || [];
+
+    const tbody =
+      document.getElementById('품목표본문');
+
+    if (!tbody) {
+      return;
+    }
+
+
+    if (!list || list.length === 0) {
+
+      tbody.innerHTML =
+        '<tr><td colspan="7"><div class="품목안내">표시할 품목이 없습니다.</div></td></tr>';
+
+      품목_정렬표시갱신();
+      return;
+
+    }
+
+
+    const 정렬된 = 품목_정렬적용(list);
+
+    tbody.innerHTML =
+      정렬된.map(function(item) {
+
+        const 사용 =
+          품목_사용여부불린(item.사용여부);
+
+        const 품목ID =
+          String(item.품목ID || '');
+
+
+        return `
+          <tr>
+            <td>${품목_escape(품목ID)}</td>
+            <td>${품목_escape(item.분류)}</td>
+            <td>${품목_escape(item.품목명)}</td>
+            <td>${품목_escape(item.단위)}</td>
+            <td>${품목_escape(item.규격)}</td>
+            <td class="가운데">${사용 ? '사용' : '<span class="미사용텍스트">미사용</span>'}</td>
+            <td class="가운데">
+              <span
+                class="품목링크"
+                onclick="품목_수정폼열기('${품목_escapeAttr(품목ID)}')"
+              >수정</span>
+              <span
+                class="품목링크"
+                onclick="품목_삭제('${품목_escapeAttr(품목ID)}')"
+              >삭제</span>
+            </td>
+          </tr>
+        `;
+
+      }).join('');
+
+    품목_정렬표시갱신();
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 정렬 (오름차순 ↔ 내림차순 토글)
+     ================================================================ */
+
+  function 품목_정렬토글(필드) {
+
+    if (품목_정렬.필드 === 필드) {
+      // 같은 컬럼: 방향 반전
+      품목_정렬.방향 =
+        품목_정렬.방향 === 'asc' ? 'desc' : 'asc';
+    } else {
+      // 다른 컬럼: 오름차순부터
+      품목_정렬 = { 필드: 필드, 방향: 'asc' };
+    }
+
+    // 현재 표시 중인 목록을 다시 렌더 (정렬만 재적용)
+    품목_테이블렌더(품목_현재표시목록);
+
+  }
+
+
+  function 품목_정렬적용(list) {
+
+    if (!품목_정렬.필드 || !품목_정렬.방향) {
+      return list;
+    }
+
+    const 필드 = 품목_정렬.필드;
+    const 부호 = 품목_정렬.방향 === 'asc' ? 1 : -1;
+
+    return list.slice().sort(function(a, b) {
+
+      const va = a[필드];
+      const vb = b[필드];
+
+      // 사용여부는 불린 정렬 (false < true)
+      if (필드 === '사용여부') {
+        const na = (va === true || String(va).toLowerCase() !== 'false') ? 1 : 0;
+        const nb = (vb === true || String(vb).toLowerCase() !== 'false') ? 1 : 0;
+        return (na - nb) * 부호;
+      }
+
+      // 문자열 정렬 (한글 로케일)
+      return String(va == null ? '' : va)
+        .localeCompare(
+          String(vb == null ? '' : vb),
+          'ko'
+        ) * 부호;
+
+    });
+
+  }
+
+
+  function 품목_정렬표시갱신() {
+
+    document
+      .querySelectorAll('.정렬표시')
+      .forEach(function(el) {
+
+        const key = el.dataset.key;
+        const 활성 =
+          key === 품목_정렬.필드 && 품목_정렬.방향;
+
+        if (활성) {
+          el.textContent =
+            품목_정렬.방향 === 'asc' ? '▲' : '▼';
+          el.classList.add('활성');
+        } else {
+          // 기본 상태: 옅은 회색 ⇅ (정렬 가능 힌트)
+          el.textContent = '⇅';
+          el.classList.remove('활성');
+        }
+
+      });
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 등록 폼 열기
+     ================================================================ */
+
+  function 품목_등록폼열기() {
+
+    document.getElementById('품목폼제목').textContent = '품목 등록';
+
+    document.getElementById('품목_품목ID').value = '';
+    document.getElementById('품목_분류').value = '';
+    document.getElementById('품목_품목명').value = '';
+    document.getElementById('품목_단위').value = '';
+    document.getElementById('품목_규격').value = '';
+    document.getElementById('품목_사용여부').checked = true;
+
+    품목_상태표시('', '');
+
+    document.getElementById('품목폼').classList.add('열림');
+
+    document.getElementById('품목_품목명').focus();
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 수정 폼 열기
+     ================================================================ */
+
+  function 품목_수정폼열기(품목ID) {
+
+    const item =
+      품목_원본목록.filter(function(x) {
+        return String(x.품목ID) === String(품목ID);
+      })[0];
+
+
+    if (!item) {
+      품목_상태표시('수정할 품목을 찾을 수 없습니다.', '오류');
+      return;
+    }
+
+
+    document.getElementById('품목폼제목').textContent = '품목 수정';
+
+    document.getElementById('품목_품목ID').value = String(item.품목ID || '');
+    document.getElementById('품목_분류').value = String(item.분류 || '');
+    document.getElementById('품목_품목명').value = String(item.품목명 || '');
+    document.getElementById('품목_단위').value = String(item.단위 || '');
+    document.getElementById('품목_규격').value = String(item.규격 || '');
+    document.getElementById('품목_사용여부').checked =
+      품목_사용여부불린(item.사용여부);
+
+    품목_상태표시('', '');
+
+    document.getElementById('품목폼').classList.add('열림');
+
+    document.getElementById('품목_품목명').focus();
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 폼 닫기
+     ================================================================ */
+
+  function 품목_폼닫기() {
+
+    document.getElementById('품목폼').classList.remove('열림');
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 저장(등록/수정)
+     ================================================================ */
+
+  function 품목_저장() {
+
+    const 품목ID =
+      document.getElementById('품목_품목ID').value.trim();
+
+    const 품목명 =
+      document.getElementById('품목_품목명').value.trim();
+
+    const 분류 =
+      document.getElementById('품목_분류').value.trim();
+
+    const 단위 =
+      document.getElementById('품목_단위').value.trim();
+
+    const 규격 =
+      document.getElementById('품목_규격').value.trim();
+
+    const 사용여부 =
+      document.getElementById('품목_사용여부').checked;
+
+
+    if (!품목명) {
+      품목_상태표시('품목명을 입력해주세요.', '오류');
+      document.getElementById('품목_품목명').focus();
+      return;
+    }
+
+
+    const data = {
+      분류: 분류,
+      품목명: 품목명,
+      단위: 단위,
+      규격: 규격,
+      사용여부: 사용여부
+    };
+
+    if (품목ID) {
+      data.품목ID = 품목ID;
+    }
+
+
+    const 저장버튼 =
+      document.getElementById('품목저장버튼');
+
+    저장버튼.disabled = true;
+    저장버튼.textContent = '저장 중...';
+
+
+    google.script.run
+
+      .withSuccessHandler(
+        function(message) {
+
+          저장버튼.disabled = false;
+          저장버튼.textContent = '저장';
+
+          품목_폼닫기();
+
+          품목_상태표시(
+            String(message || '저장되었습니다.'),
+            '성공'
+          );
+
+          품목_목록불러오기();
+
+        }
+      )
+
+      .withFailureHandler(
+        function(error) {
+
+          저장버튼.disabled = false;
+          저장버튼.textContent = '저장';
+
+          품목_상태표시(
+            (error && error.message) || '저장에 실패했습니다.',
+            '오류'
+          );
+
+        }
+      )
+
+      .ITEM_save(
+        현재세션 ? 현재세션.token : '',
+        data
+      );
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 삭제
+     ================================================================ */
+
+  function 품목_삭제(품목ID) {
+
+    const id = String(품목ID || '').trim();
+
+    if (!id) {
+      return;
+    }
+
+
+    const item =
+      품목_원본목록.filter(function(x) {
+        return String(x.품목ID) === id;
+      })[0];
+
+    const 이름 =
+      item ? String(item.품목명 || '') : '';
+
+
+    const 확인 =
+      window.confirm(
+        '다음 품목을 삭제하시겠습니까?\n\n' +
+        id + (이름 ? ' / ' + 이름 : '')
+      );
+
+    if (!확인) {
+      return;
+    }
+
+
+    google.script.run
+
+      .withSuccessHandler(
+        function(message) {
+
+          품목_상태표시(
+            String(message || '삭제되었습니다.'),
+            '성공'
+          );
+
+          품목_목록불러오기();
+
+        }
+      )
+
+      .withFailureHandler(
+        function(error) {
+
+          품목_상태표시(
+            (error && error.message) || '삭제에 실패했습니다.',
+            '오류'
+          );
+
+        }
+      )
+
+      .ITEM_delete(
+        현재세션 ? 현재세션.token : '',
+        id
+      );
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 유틸
+     ================================================================ */
+
+  function 품목_상태표시(message, type) {
+
+    const el =
+      document.getElementById('품목상태');
+
+    if (!el) {
+      return;
+    }
+
+    el.textContent = message || '';
+
+    el.className = '품목상태';
+
+    if (type === '성공') {
+      el.classList.add('성공');
+    } else if (type === '오류') {
+      el.classList.add('오류');
+    }
+
+  }
+
+
+  function 품목_사용여부불린(값) {
+
+    if (값 === true) {
+      return true;
+    }
+
+    if (값 === false) {
+      return false;
+    }
+
+    const s =
+      String(값 == null ? '' : 값).trim().toLowerCase();
+
+    if (s === 'false' || s === '' || s === '0' || s === '미사용') {
+      return false;
+    }
+
+    return true;
+
+  }
+
+
+  function 품목_숫자콤마(값) {
+
+    if (값 === '' || 값 == null) {
+      return '';
+    }
+
+    const n = Number(값);
+
+    if (isNaN(n)) {
+      return 품목_escape(값);
+    }
+
+    return n.toLocaleString('ko-KR');
+
+  }
+
+
+  function 품목_escape(값) {
+
+    return String(값 == null ? '' : 값)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  }
+
+
+  function 품목_escapeAttr(값) {
+
+    return String(값 == null ? '' : 값)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '&quot;');
+
+  }
+
+
+  /* ================================================================
+     품목 관리 - 컬럼 너비 조절 (드래그 리사이즈 + localStorage 저장)
+     ================================================================ */
+
+  const 품목표_저장키 = '품목표_컬럼너비_v1';
+
+
+  function 품목표_컬럼너비불러오기() {
+
+    try {
+
+      return JSON.parse(
+        localStorage.getItem(품목표_저장키) || '{}'
+      );
+
+    } catch (e) {
+
+      return {};
+
+    }
+
+  }
+
+
+  function 품목표_컬럼너비저장() {
+
+    const table =
+      document.querySelector('.품목표');
+
+    if (!table) return;
+
+
+    const 결과 = {};
+
+    table.querySelectorAll('colgroup col').forEach(
+      function(col) {
+
+        const key = col.dataset.key;
+        const w = col.style.width;
+
+        if (key && w) {
+          결과[key] = w;
+        }
+
+      }
+    );
+
+
+    try {
+
+      localStorage.setItem(
+        품목표_저장키,
+        JSON.stringify(결과)
+      );
+
+    } catch (e) {
+      /* 저장 실패는 조용히 무시 (프라이빗 모드 등) */
+    }
+
+  }
+
+
+  function 품목표_컬럼리사이즈초기화() {
+
+    const table =
+      document.querySelector('.품목표');
+
+    if (!table) return;
+
+
+    const cols =
+      table.querySelectorAll('colgroup col');
+
+
+    /* 저장된 너비 복원 */
+    const 저장 = 품목표_컬럼너비불러오기();
+
+    cols.forEach(
+      function(col) {
+
+        const key = col.dataset.key;
+
+        if (key && 저장[key]) {
+          col.style.width = 저장[key];
+        }
+
+      }
+    );
+
+
+    /* 각 핸들에 드래그 리스너 부착 */
+    const handles =
+      table.querySelectorAll('.리사이즈핸들');
+
+    handles.forEach(
+      function(handle) {
+
+        handle.addEventListener(
+          'mousedown',
+          function(event) {
+
+            event.preventDefault();
+            event.stopPropagation();
+
+
+            const 컬럼인덱스 =
+              parseInt(handle.dataset.col, 10);
+
+            const 대상col = cols[컬럼인덱스];
+
+            if (!대상col) return;
+
+
+            const 시작X = event.pageX;
+            const 시작너비 =
+              대상col.getBoundingClientRect().width;
+
+
+            document.body.classList.add('리사이즈중');
+            handle.classList.add('활성');
+
+
+            function 드래그이동(ev) {
+
+              const 이동량 = ev.pageX - 시작X;
+              const 새너비 = Math.max(40, 시작너비 + 이동량);
+
+              대상col.style.width = 새너비 + 'px';
+
+            }
+
+
+            function 드래그종료() {
+
+              document.removeEventListener('mousemove', 드래그이동);
+              document.removeEventListener('mouseup', 드래그종료);
+
+              document.body.classList.remove('리사이즈중');
+              handle.classList.remove('활성');
+
+              품목표_컬럼너비저장();
+
+            }
+
+
+            document.addEventListener('mousemove', 드래그이동);
+            document.addEventListener('mouseup', 드래그종료);
+
+          }
+        );
+
+      }
+    );
+
+  }
+
+
+</script>

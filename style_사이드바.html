@@ -1,0 +1,275 @@
+<style>
+    /* ================================================================
+       사이드바
+       ================================================================ */
+
+    .사이드바 {
+
+      width: 230px;
+      height: 100vh;
+
+      flex-shrink: 0;
+
+      display: flex;
+      flex-direction: column;
+
+      background: #f3efff;
+
+      border-right: 1px solid #e4dcfb;
+    }
+
+    .사이드바브랜드 {
+
+      padding: 24px 20px 20px;
+
+      border-bottom: 1px solid #e4dcfb;
+    }
+
+    .사이드바브랜드 .main {
+
+      font-size: 20px;
+      font-weight: 800;
+
+      color: #332b52;
+    }
+
+    .사이드바브랜드 .sub {
+
+      margin-top: 2px;
+
+      font-size: 20px;
+      font-weight: 800;
+
+      color: #8064d8;
+    }
+
+
+    /* ================================================================
+       병원 정보
+       ================================================================ */
+
+    .사이드바병원 {
+
+      margin: 16px 14px;
+
+      padding: 10px 13px;
+
+      border-radius: 10px;
+
+      background: rgba(128, 100, 216, 0.08);
+    }
+
+    .사이드바병원 .name {
+
+      font-size: 14px;
+      font-weight: 700;
+
+      color: #40385f;
+
+      text-align: center;
+    }
+
+
+    /* ================================================================
+       메뉴
+       ================================================================ */
+
+    .메뉴영역 {
+
+      flex: 1;
+
+      padding: 4px 10px;
+
+      overflow-y: auto;
+    }
+
+    .메뉴버튼 {
+
+      width: 100%;
+
+      height: 44px;
+
+      margin-bottom: 4px;
+
+      padding: 0 16px;
+
+      display: flex;
+      align-items: center;
+
+      border: 0;
+      border-radius: 9px;
+
+      background: transparent;
+
+      color: #5d5673;
+
+      font-size: 14px;
+      font-weight: 600;
+
+      text-align: left;
+
+      cursor: pointer;
+    }
+
+    .메뉴버튼:hover {
+
+      background: #e9e2fb;
+
+      color: #40385f;
+    }
+
+    .메뉴버튼.active {
+
+      background: #8064d8;
+
+      color: white;
+
+      box-shadow:
+        0 5px 12px rgba(128, 100, 216, 0.20);
+    }
+
+
+    /* ================================================================
+       사이드바 그룹 (아코디언)
+       ================================================================ */
+
+    .메뉴그룹 {
+      margin-bottom: 4px;
+    }
+
+    .그룹상위 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .그룹화살표 {
+      font-size: 10px;
+      color: #8b849d;
+      transition: transform 0.15s ease;
+    }
+
+    .메뉴그룹.열림 > .그룹상위 .그룹화살표 {
+      transform: rotate(90deg);
+      color: #40385f;
+    }
+
+    .메뉴그룹.열림 > .그룹상위:not(.active) {
+      background: #e9e2fb;
+      color: #40385f;
+    }
+
+    .하위목록 {
+      display: none;
+      padding: 2px 0 6px 0;
+    }
+
+    .메뉴그룹.열림 > .하위목록 {
+      display: block;
+    }
+
+    .하위버튼 {
+      width: 100%;
+      height: 36px;
+      margin-bottom: 2px;
+      padding: 0 14px 0 28px;
+      display: flex;
+      align-items: center;
+
+      border: 0;
+      border-radius: 8px;
+      border-left: 3px solid transparent;
+
+      background: transparent;
+
+      color: #665f78;
+      font-size: 13px;
+      font-weight: 500;
+
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .하위버튼:hover {
+      background: #ede6fb;
+      color: #40385f;
+    }
+
+    .하위버튼.active {
+      background: #e0d5fa;
+      color: #40385f;
+      font-weight: 700;
+      border-left-color: #8064d8;
+    }
+
+
+    /* ================================================================
+       사이드바 하단
+       ================================================================ */
+
+    .사이드바하단 {
+
+      padding: 14px;
+
+      border-top: 1px solid #e4dcfb;
+    }
+
+    .사용자정보 {
+
+      margin-bottom: 10px;
+
+      padding: 10px 11px;
+
+      border-radius: 9px;
+
+      background: white;
+    }
+
+    .사용자정보 .name {
+
+      display: inline;
+
+      font-size: 13px;
+      font-weight: 700;
+
+      color: #40385f;
+    }
+
+    .사용자정보 .role {
+
+      display: inline;
+
+      margin-left: 6px;
+
+      font-size: 11px;
+
+      color: #8b849d;
+    }
+
+    .로그아웃버튼 {
+
+      width: 100%;
+      height: 38px;
+
+      border: 1px solid #ddd7ee;
+      border-radius: 8px;
+
+      background: white;
+
+      color: #665f78;
+
+      font-size: 12px;
+      font-weight: 600;
+
+      cursor: pointer;
+    }
+
+    .로그아웃버튼:hover {
+
+      background: #f8f6fc;
+
+      border-color: #cfc5e8;
+    }
+
+
+</style>
