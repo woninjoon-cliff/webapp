@@ -204,6 +204,72 @@
 
 
     /* ================================================================
+       하위그룹 (2단 아코디언 — 관리 > 기준정보)
+       ================================================================ */
+
+    .하위그룹 {
+      margin-bottom: 2px;
+    }
+
+    .하위그룹상위 {
+      justify-content: space-between;
+    }
+
+    .하위그룹.열림 > .하위그룹상위 {
+      background: #ede6fb;
+      color: #40385f;
+    }
+
+    .하위그룹.열림 > .하위그룹상위 .그룹화살표 {
+      transform: rotate(90deg);
+      color: #40385f;
+    }
+
+    .하위하위목록 {
+      display: none;
+      padding: 2px 0 4px 0;
+    }
+
+    .하위그룹.열림 > .하위하위목록 {
+      display: block;
+    }
+
+    .하위하위버튼 {
+      width: 100%;
+      height: 34px;
+      margin-bottom: 2px;
+      padding: 0 14px 0 42px;
+      display: flex;
+      align-items: center;
+
+      border: 0;
+      border-radius: 8px;
+      border-left: 3px solid transparent;
+
+      background: transparent;
+
+      color: #6d667e;
+      font-size: 12.5px;
+      font-weight: 500;
+
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .하위하위버튼:hover {
+      background: #ede6fb;
+      color: #40385f;
+    }
+
+    .하위하위버튼.active {
+      background: #e0d5fa;
+      color: #40385f;
+      font-weight: 700;
+      border-left-color: #8064d8;
+    }
+
+
+    /* ================================================================
        사이드바 하단
        ================================================================ */
 

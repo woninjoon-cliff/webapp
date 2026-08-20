@@ -339,7 +339,21 @@
     mgmt_vendor: 'management',
     mgmt_procedure: 'management',
     mgmt_manager: 'management',
-    mgmt_doctor: 'management'
+    mgmt_doctor: 'management',
+    mgmt_visitroute: 'management',
+    mgmt_visitdetail: 'management',
+    mgmt_visittype: 'management'
+  };
+
+
+  /* 페이지 → 소속 하위그룹 매핑 (관리 > 기준정보 2단 메뉴) */
+  const 페이지_하위그룹 = {
+    mgmt_procedure: 'mgmt_base',
+    mgmt_manager: 'mgmt_base',
+    mgmt_doctor: 'mgmt_base',
+    mgmt_visitroute: 'mgmt_base',
+    mgmt_visitdetail: 'mgmt_base',
+    mgmt_visittype: 'mgmt_base'
   };
 
 
@@ -376,7 +390,10 @@
     mgmt_vendor: { title: '거래처 관리', description: '거래처 등록 및 관리' },
     mgmt_procedure: { title: '시술 관리', description: '시술명 목록 관리 (시술 등록 드롭다운)' },
     mgmt_manager: { title: '실장 관리', description: '담당실장 목록 관리' },
-    mgmt_doctor: { title: '원장 관리', description: '담당원장 목록 관리' }
+    mgmt_doctor: { title: '원장 관리', description: '담당원장 목록 관리' },
+    mgmt_visitroute: { title: '내원경로 관리', description: '내원경로 목록 관리 (시술 등록 드롭다운)' },
+    mgmt_visitdetail: { title: '세부 관리', description: '내원 세부 채널 목록 관리 (비고의 경로= 메타로 내원경로 종속)' },
+    mgmt_visittype: { title: '방문유형 관리', description: '방문유형 목록 관리' }
   };
 
 
@@ -412,6 +429,31 @@
   }
 
 
+  /* 하위그룹 아코디언 토글 (관리 > 기준정보, 열 때 첫 하위 페이지 이동) */
+  function 하위그룹토글(하위그룹키) {
+    const 요소 =
+      document.querySelector(
+        '.하위그룹[data-subgroup="' + 하위그룹키 + '"]'
+      );
+
+    if (!요소) return;
+
+    if (요소.classList.contains('열림')) {
+      요소.classList.remove('열림');
+      return;
+    }
+
+    요소.classList.add('열림');
+
+    const 첫하위 =
+      요소.querySelector('.하위하위버튼');
+
+    if (첫하위 && 첫하위.dataset.page) {
+      페이지이동(첫하위.dataset.page);
+    }
+  }
+
+
   function 페이지이동(page) {
 
     현재페이지 = page;
@@ -419,7 +461,7 @@
 
     /* 모든 최상위/하위 버튼 active 초기화 후 해당 페이지만 active */
     document
-      .querySelectorAll('.메뉴버튼, .하위버튼')
+      .querySelectorAll('.메뉴버튼, .하위버튼, .하위하위버튼')
       .forEach(function(button) {
         button.classList.toggle(
           'active',
@@ -437,6 +479,19 @@
         g.classList.toggle(
           '열림',
           g.dataset.group === 소속그룹
+        );
+      });
+
+
+    /* 소속 하위그룹만 열고 나머지 하위그룹 닫기 (관리 > 기준정보 2단) */
+    const 소속하위그룹 = 페이지_하위그룹[page];
+
+    document
+      .querySelectorAll('.하위그룹')
+      .forEach(function(g) {
+        g.classList.toggle(
+          '열림',
+          g.dataset.subgroup === 소속하위그룹
         );
       });
 
@@ -531,6 +586,24 @@
     if (page === 'mgmt_doctor') {
       content.innerHTML = 기준정보_화면('담당원장');
       기준정보_초기화('담당원장');
+      return;
+    }
+
+    if (page === 'mgmt_visitroute') {
+      content.innerHTML = 기준정보_화면('내원경로');
+      기준정보_초기화('내원경로');
+      return;
+    }
+
+    if (page === 'mgmt_visitdetail') {
+      content.innerHTML = 기준정보_화면('세부');
+      기준정보_초기화('세부');
+      return;
+    }
+
+    if (page === 'mgmt_visittype') {
+      content.innerHTML = 기준정보_화면('방문유형');
+      기준정보_초기화('방문유형');
       return;
     }
 

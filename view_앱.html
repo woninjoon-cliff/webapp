@@ -135,9 +135,20 @@
             <button class="하위버튼" data-page="mgmt_user" onclick="페이지이동('mgmt_user')">사용자 관리</button>
             <button class="하위버튼" data-page="mgmt_vendor" onclick="페이지이동('mgmt_vendor')">거래처 관리</button>
             <button class="하위버튼" data-page="item" onclick="페이지이동('item')">품목 관리</button>
-            <button class="하위버튼" data-page="mgmt_procedure" onclick="페이지이동('mgmt_procedure')">시술 관리</button>
-            <button class="하위버튼" data-page="mgmt_manager" onclick="페이지이동('mgmt_manager')">실장 관리</button>
-            <button class="하위버튼" data-page="mgmt_doctor" onclick="페이지이동('mgmt_doctor')">원장 관리</button>
+            <div class="하위그룹" data-subgroup="mgmt_base">
+              <button class="하위버튼 하위그룹상위" onclick="하위그룹토글('mgmt_base')">
+                <span>기준정보</span>
+                <span class="그룹화살표">&#9654;</span>
+              </button>
+              <div class="하위하위목록">
+                <button class="하위하위버튼" data-page="mgmt_procedure" onclick="페이지이동('mgmt_procedure')">시술 관리</button>
+                <button class="하위하위버튼" data-page="mgmt_manager" onclick="페이지이동('mgmt_manager')">실장 관리</button>
+                <button class="하위하위버튼" data-page="mgmt_doctor" onclick="페이지이동('mgmt_doctor')">원장 관리</button>
+                <button class="하위하위버튼" data-page="mgmt_visitroute" onclick="페이지이동('mgmt_visitroute')">내원경로 관리</button>
+                <button class="하위하위버튼" data-page="mgmt_visitdetail" onclick="페이지이동('mgmt_visitdetail')">세부 관리</button>
+                <button class="하위하위버튼" data-page="mgmt_visittype" onclick="페이지이동('mgmt_visittype')">방문유형 관리</button>
+              </div>
+            </div>
             <button class="하위버튼" data-page="mgmt_cost" onclick="페이지이동('mgmt_cost')">원가 기준</button>
           </div>
         </div>
