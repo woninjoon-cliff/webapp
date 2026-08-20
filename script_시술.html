@@ -401,7 +401,7 @@ function 시술_금일불러오기() {
       }
 
       if (목록.length === 0) {
-        if (상태) 상태.textContent = '금일 0건';
+        if (상태) 상태.textContent = '고객 0명 시술 0건 매출 0원';
         tbody.innerHTML = '<tr><td colspan="6"><div class="시술안내">오늘 등록된 시술이 없습니다.</div></td></tr>';
         return;
       }
@@ -420,7 +420,14 @@ function 시술_금일불러오기() {
       });
 
       if (상태) {
-        상태.textContent = '금일 ' + 묶음들.length + '명 / 시술 ' + 목록.length + '건';
+        /* 취소 건은 PROC_getList 가 이미 제외한다 (취소포함 미전달 → 기본 제외) */
+        let 매출합계 = 0;
+        목록.forEach(function(r) { 매출합계 += Number(r.시술금액) || 0; });
+
+        상태.textContent =
+          '고객 ' + 묶음들.length + '명 ' +
+          '시술 ' + 목록.length + '건 ' +
+          '매출 ' + 시술_금액표시(매출합계) + '원';
       }
 
       tbody.innerHTML = 묶음들.map(function(m) {
@@ -1566,6 +1573,11 @@ function 시술_CSV선택(fileInput) {
       } catch (e) { /* euc-kr 미지원 환경이면 utf-8 결과 유지 */ }
     }
 
+    // BOM(U+FEFF) 제거 — 남겨두면 첫 컬럼 값이 오염돼 환자번호 매칭이 깨진다
+    if (text.charCodeAt(0) === 0xFEFF) {
+      text = text.slice(1);
+    }
+
     시술_CSV채우기(text);
     fileInput.value = '';
   };
@@ -1639,14 +1651,14 @@ function 시술_CSV채우기(text) {
     return;
   }
 
-  const 첫칸 = String(rows[0][0] || '').trim();
-
-  if (첫칸 === '환자번호' || 첫칸 === '시술월') {
-    rows.shift();
-  }
+  /* CSV 첫 줄은 무조건 버린다 (2026-08-20 확정).
+     기존 헤더 감지(첫칸 === '환자번호' | '시술월')는 EMR 내보내기처럼 헤더가 다르면
+     첫 줄이 데이터로 섞여 들어갔다. 예: picker_encounter_*.csv 는
+     '기간,환자번호,환자명,...' 으로 시작한다 */
+  rows.shift();
 
   if (!rows.length) {
-    alert('CSV에 데이터 행이 없습니다.');
+    alert('CSV에 데이터 행이 없습니다. (첫 줄은 헤더로 보고 항상 제외합니다)');
     return;
   }
 
