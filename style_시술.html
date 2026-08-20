@@ -130,7 +130,11 @@
   overflow-y: auto;
 }
 
-.시술금일영역 thead th {
+/* ★ 선택자에 .시술표 를 반드시 포함할 것 (특정도 0-2-2).
+   아래 `.시술표 thead th` 가 리사이즈 핸들용으로 position: relative 를 지정하는데,
+   `.시술금일영역 thead th` 만 쓰면 특정도가 0-1-2 로 같아서 뒤에 오는 relative 가
+   sticky 를 덮어쓴다 (2026-08-20 실제 발생 — 헤더가 고정되지 않던 원인) */
+.시술금일영역 .시술표 thead th {
   position: sticky;
   top: 0;
   z-index: 1;
