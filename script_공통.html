@@ -997,6 +997,9 @@
 
     if (cols.length !== ths.length) return;
 
+    /* 컬럼 경계선 공통 스타일 (style_공통.html .목록표) */
+    table.classList.add('목록표');
+
     /* data-key 보정 — 헤더 텍스트를 키로 (없으면 인덱스) */
     cols.forEach(function(col, i) {
       if (!col.dataset.key) {
