@@ -1,0 +1,1604 @@
+<script>
+/* =====================================================================
+   script_시술.html — 시술 도메인 프론트
+   대상 페이지: procedure_main(시술 메인, 요약 전용)
+              procedure_register(시술 등록, 드롭다운 + 일괄 입력)
+              procedure_history(시술 내역, 검색·수정·취소)
+   서버: Procedure.gs (PROC_*), Base.gs (BASE_*)  /  05_시술 18열
+   - 시술명 / 담당실장 / 담당원장 / 패키지여부는 드롭다운(목록 강제)
+   - 목록에 없는 값은 빨간 "(목록없음)" 표시로 남고 저장이 차단된다
+   ===================================================================== */
+
+
+/* ================================================================
+   전역 상태
+   ================================================================ */
+
+let 시술_원본목록 = [];
+let 시술_정렬상태 = { 키: '', 방향: 1 };
+
+/* 기준정보 드롭다운 목록 (BASE_getList로 로딩) */
+let 시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [] };
+
+/* 입력표 열 순서(고정) — 원가표(비올라셀_신규 원가표) 열 순서와 동일
+   원가표: 환자번호 환자명 담당실장 담당의   시술명 용량 단위 매출금액 ... 비고 패키지여부
+   ERP  : 환자번호 환자명 담당실장 담당원장 시술명 용량 단위 시술금액   비고 패키지여부 */
+const 시술_입력열 = ['환자번호', '환자명', '담당실장', '담당원장', '시술명', '용량', '단위', '시술금액', '비고', '패키지여부'];
+
+/* 열 인덱스 → 셀 형태. select 칸은 기준정보 구분명 또는 '패키지' */
+const 시술_셀형태 = { 2: '담당실장', 3: '담당원장', 4: '시술명', 9: '패키지' };
+
+const 시술_구분목록 = ['일반', '회원권', '체험단무료', '다회차'];
+
+
+/* ================================================================
+   공통 헬퍼
+   ================================================================ */
+
+function 시술_escape(value) {
+
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+function 시술_금액표시(n) {
+
+  return (Number(n) || 0).toLocaleString('ko-KR');
+}
+
+
+function 시술_오늘문자열() {
+
+  const d = new Date();
+
+  return d.getFullYear() + '-' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+    ('0' + d.getDate()).slice(-2);
+}
+
+
+/* ================================================================
+   기준정보 목록 로딩 (등록·내역 화면 진입 시 호출)
+   완료 후 콜백 실행. 실패해도 콜백은 실행하되 안내를 남긴다.
+   ================================================================ */
+
+function 시술_기준목록불러오기(완료콜백) {
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [] };
+
+      (목록 || []).forEach(function(r) {
+        if (시술_기준목록[r.구분]) {
+          시술_기준목록[r.구분].push(r.값);
+        }
+      });
+
+      if (완료콜백) 완료콜백();
+    })
+
+    .withFailureHandler(function(error) {
+
+      console.error('기준정보 목록 조회 실패', error);
+      alert('기준정보 목록을 불러오지 못했습니다.\n' + (error && error.message ? error.message : error));
+
+      if (완료콜백) 완료콜백();
+    })
+
+    .BASE_getList(현재세션.token, {});
+}
+
+
+/* select 옵션 HTML (기준정보 구분 기준) */
+function 시술_옵션HTML(구분, 안내) {
+
+  return '<option value="">' + 안내 + '</option>' +
+    시술_기준목록[구분].map(function(v) {
+      return '<option value="' + 시술_escape(v) + '">' + 시술_escape(v) + '</option>';
+    }).join('');
+}
+
+
+/* select에 값 설정. 목록에 없으면 "(목록없음)" 임시 옵션으로 표시하고
+   저장 시 차단된다. 빈값이면 미선택. */
+function 시술_셀렉트값설정(sel, v) {
+
+  v = String(v === null || v === undefined ? '' : v).trim();
+
+  // 기존 임시 옵션 제거
+  Array.prototype.slice.call(sel.querySelectorAll('option[data-목록없음]'))
+    .forEach(function(o) { o.remove(); });
+
+  sel.classList.remove('시술오류칸');
+
+  if (v === '') {
+    sel.value = '';
+    return;
+  }
+
+  sel.value = v;
+
+  if (sel.value !== v) {
+    // 목록에 없는 값 — 지우지 않고 보이게 남긴 뒤 저장 차단
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = v + ' (목록없음)';
+    o.dataset.목록없음 = '1';
+    sel.appendChild(o);
+    sel.value = v;
+    sel.classList.add('시술오류칸');
+  }
+}
+
+
+/* 패키지여부 select 값 설정 — 붙여넣기 값은 정규화해서 넣는다 */
+function 시술_패키지값설정(sel, v) {
+
+  const s = String(v === null || v === undefined ? '' : v).trim().toUpperCase();
+
+  sel.value = (s === 'Y' || s === 'O' || s === 'TRUE' || s === '예' || s === '패키지' || s === '1')
+    ? 'Y' : '';
+}
+
+
+/* 입력표 셀(입력칸/셀렉트)에 값 설정 */
+function 시술_셀값설정(el, 열, v) {
+
+  if (시술_셀형태[열] === '패키지') {
+    시술_패키지값설정(el, v);
+    return;
+  }
+
+  if (시술_셀형태[열]) {
+    시술_셀렉트값설정(el, v);
+    return;
+  }
+
+  el.value = String(v === null || v === undefined ? '' : v).trim();
+}
+
+
+/* ================================================================
+   시술 메인 화면 (요약 전용 + 최근 등록)
+   ================================================================ */
+
+function 시술_메인화면() {
+
+  return `
+    <div class="시술요약그리드">
+
+      <div class="시술요약카드">
+        <div class="라벨">금일 시술</div>
+        <div class="숫자" id="시술요약_금일">-</div>
+        <div class="설명" id="시술요약_금일날짜"></div>
+      </div>
+
+      <div class="시술요약카드">
+        <div class="라벨">당월 시술</div>
+        <div class="숫자" id="시술요약_당월">-</div>
+        <div class="설명" id="시술요약_당월월"></div>
+      </div>
+
+      <div class="시술요약카드">
+        <div class="라벨">당월 매출</div>
+        <div class="숫자" id="시술요약_매출">-</div>
+        <div class="설명">시술금액 합계 (취소 제외)</div>
+      </div>
+
+      <div class="시술요약카드">
+        <div class="라벨">당월 원가</div>
+        <div class="숫자 미연결" id="시술요약_원가">-</div>
+        <div class="설명" id="시술요약_원가설명"></div>
+      </div>
+
+      <div class="시술요약카드">
+        <div class="라벨">당월 구분별</div>
+        <div class="숫자 작게" id="시술요약_구분">-</div>
+        <div class="설명">건수 기준</div>
+      </div>
+
+    </div>
+
+    <div class="시술표카드">
+
+      <div class="시술표카드헤더">
+        <div class="제목">금일 시술</div>
+        <div class="우측" id="시술금일_상태">불러오는 중...</div>
+      </div>
+
+      <div class="시술표영역 시술금일영역">
+        <table class="시술표">
+          <thead>
+            <tr>
+              <th><span class="th_텍스트">환자번호</span></th>
+              <th><span class="th_텍스트">환자명</span></th>
+              <th><span class="th_텍스트">구분</span></th>
+              <th><span class="th_텍스트">시술 내용</span></th>
+              <th><span class="th_텍스트">시술 수</span></th>
+              <th><span class="th_텍스트">금액 합계</span></th>
+            </tr>
+          </thead>
+          <tbody id="시술금일본문">
+            <tr><td colspan="6"><div class="시술안내">불러오는 중...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="시술도구안내" style="margin-top:10px; margin-bottom:0;">
+        등록 묶음(환자별) 단위로 표시합니다. 개별 시술의 조회·수정·취소는 시술 내역 메뉴에서 진행합니다.
+      </div>
+
+    </div>
+  `;
+}
+
+
+function 시술_메인초기화() {
+
+  시술_요약불러오기();
+  시술_금일불러오기();
+}
+
+
+/* ================================================================
+   요약
+   ================================================================ */
+
+function 시술_요약불러오기() {
+
+  google.script.run
+
+    .withSuccessHandler(function(요약) {
+
+      const 오늘 = 시술_오늘문자열();
+
+      document.getElementById('시술요약_금일').textContent = 요약.금일건수 + '건';
+      document.getElementById('시술요약_금일날짜').textContent = 오늘;
+      document.getElementById('시술요약_당월').textContent = 요약.당월건수 + '건';
+      document.getElementById('시술요약_당월월').textContent = 오늘.substring(0, 7);
+      document.getElementById('시술요약_매출').textContent = 시술_금액표시(요약.당월매출) + '원';
+
+      // 원가: 서버가 원가연결 = true 를 반환하면 자동 전환 (지침 4-4)
+      const 원가칸 = document.getElementById('시술요약_원가');
+      const 원가설명 = document.getElementById('시술요약_원가설명');
+
+      if (요약.원가연결 === true) {
+        원가칸.classList.remove('미연결');
+        원가칸.textContent = 시술_금액표시(요약.당월원가) + '원';
+        원가설명.textContent = 'FIFO 기준 (취소 제외)';
+      } else {
+        원가칸.classList.add('미연결');
+        원가칸.textContent = '미연결';
+        원가설명.textContent = 'LOT/재고(FIFO) 구현 후 연동';
+      }
+
+      // 구분당 한 줄: 건수 · 매출
+      const 구분매출 = 요약.당월구분별매출 || {};
+
+      document.getElementById('시술요약_구분').innerHTML =
+        ['일반', '회원권', '체험단무료', '다회차'].map(function(g) {
+          return 시술_escape(g) + ' ' + (요약.당월구분별[g] || 0) + '건 · ' +
+            시술_금액표시(구분매출[g] || 0) + '원';
+        }).join('<br>');
+    })
+
+    .withFailureHandler(function(error) {
+      console.error('시술 요약 조회 실패', error);
+    })
+
+    .PROC_getSummary(현재세션.token);
+}
+
+
+/* ================================================================
+   메인: 금일 시술 (읽기 전용, 등록 묶음·환자별 1행)
+   - 같은 등록묶음ID + 환자번호 = 1행 (한 사람이 받은 여러 시술을 묶음)
+   - 시술 내용: "울쎄라 외 2건" 형식, 금액은 합계
+   ================================================================ */
+
+function 시술_금일불러오기() {
+
+  const 상태 = document.getElementById('시술금일_상태');
+  const tbody = document.getElementById('시술금일본문');
+  const 오늘 = 시술_오늘문자열();
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      목록 = 목록 || [];
+
+      if (!tbody) {
+        return;
+      }
+
+      if (목록.length === 0) {
+        if (상태) 상태.textContent = '금일 0건';
+        tbody.innerHTML = '<tr><td colspan="6"><div class="시술안내">오늘 등록된 시술이 없습니다.</div></td></tr>';
+        return;
+      }
+
+      // 등록묶음ID + 환자번호 단위로 묶기
+      const 묶음들 = [];
+      const 맵 = {};
+
+      목록.forEach(function(r) {
+        const 키 = r.등록묶음ID + '|' + r.환자번호;
+        if (!맵[키]) {
+          맵[키] = { 행들: [] };
+          묶음들.push(맵[키]);
+        }
+        맵[키].행들.push(r);
+      });
+
+      if (상태) {
+        상태.textContent = '금일 ' + 묶음들.length + '명 / 시술 ' + 목록.length + '건';
+      }
+
+      tbody.innerHTML = 묶음들.map(function(m) {
+
+        const 첫 = m.행들[0];
+        const 개수 = m.행들.length;
+
+        const 내용 = 개수 === 1
+          ? 첫.시술명
+          : 첫.시술명 + ' 외 ' + (개수 - 1) + '건';
+
+        const 전체목록 = m.행들.map(function(r) { return r.시술명; }).join(', ');
+
+        let 합계 = 0;
+        m.행들.forEach(function(r) { 합계 += Number(r.시술금액) || 0; });
+
+        return '<tr>' +
+          '<td>' + 시술_escape(첫.환자번호) + '</td>' +
+          '<td>' + 시술_escape(첫.환자명) + '</td>' +
+          '<td>' + 시술_escape(첫.시술구분) + '</td>' +
+          '<td title="' + 시술_escape(전체목록) + '">' + 시술_escape(내용) + '</td>' +
+          '<td class="우">' + 개수 + '</td>' +
+          '<td class="우">' + 시술_금액표시(합계) + '</td>' +
+        '</tr>';
+      }).join('');
+    })
+
+    .withFailureHandler(function(error) {
+
+      if (상태) {
+        상태.textContent = '조회 실패';
+      }
+
+      console.error('금일 시술 조회 실패', error);
+    })
+
+    .PROC_getList(현재세션.token, { 시작일: 오늘, 종료일: 오늘, 최대건수: 500 });
+}
+
+
+/* ================================================================
+   시술 내역 화면 (검색 + 목록 + 수정 + 취소)
+   ================================================================ */
+
+function 시술_내역화면() {
+
+  return `
+    <div class="시술검색바">
+
+      <div class="필드">
+        <label>기간 (시술일 기준)</label>
+        <select id="시술검색_기간방식" onchange="시술_기간방식전환()">
+          <option value="월별">월별</option>
+          <option value="일별">일별</option>
+          <option value="기간">기간 지정</option>
+          <option value="전체">전체</option>
+        </select>
+      </div>
+
+      <div class="필드" id="시술검색_월필드">
+        <label>조회 월</label>
+        <input type="month" id="시술검색_월">
+      </div>
+
+      <div class="필드" id="시술검색_일필드" style="display:none">
+        <label>조회일</label>
+        <input type="date" id="시술검색_일">
+      </div>
+
+      <div class="필드" id="시술검색_시작필드" style="display:none">
+        <label>시작일</label>
+        <input type="date" id="시술검색_시작일">
+      </div>
+
+      <div class="필드" id="시술검색_종료필드" style="display:none">
+        <label>종료일</label>
+        <input type="date" id="시술검색_종료일">
+      </div>
+
+      <div class="필드">
+        <label>환자번호</label>
+        <input type="text" id="시술검색_환자번호" style="width:110px">
+      </div>
+
+      <div class="필드">
+        <label>환자명</label>
+        <input type="text" id="시술검색_환자명" style="width:100px">
+      </div>
+
+      <div class="필드">
+        <label>시술구분</label>
+        <select id="시술검색_구분">
+          <option value="">전체</option>
+          <option value="일반">일반</option>
+          <option value="회원권">회원권</option>
+          <option value="체험단무료">체험단무료</option>
+          <option value="다회차">다회차</option>
+        </select>
+      </div>
+
+      <div class="필드">
+        <label>취소 포함</label>
+        <select id="시술검색_취소포함">
+          <option value="false">제외</option>
+          <option value="true">포함</option>
+        </select>
+      </div>
+
+      <button class="버튼 버튼주요" onclick="시술_검색()">조회</button>
+      <button class="버튼 버튼보조" onclick="시술_오늘조회()">오늘</button>
+      <button class="버튼 버튼보조" onclick="시술_검색초기화()">초기화</button>
+
+    </div>
+
+    <div class="시술수정폼" id="시술수정폼">
+
+      <div class="폼제목">시술 수정 <span id="시술수정_ID표시" style="color:#8b849d; font-weight:400; font-size:12px;"></span></div>
+
+      <input type="hidden" id="시술수정_시술ID">
+
+      <div class="시술수정그리드">
+
+        <div class="시술폼필드">
+          <label>환자번호 <span class="필수">*</span></label>
+          <input type="text" id="시술수정_환자번호">
+        </div>
+
+        <div class="시술폼필드">
+          <label>환자명</label>
+          <input type="text" id="시술수정_환자명">
+        </div>
+
+        <div class="시술폼필드">
+          <label>시술일 <span class="필수">*</span></label>
+          <input type="date" id="시술수정_시술일">
+        </div>
+
+        <div class="시술폼필드">
+          <label>시술명 <span class="필수">*</span></label>
+          <select id="시술수정_시술명"></select>
+        </div>
+
+        <div class="시술폼필드">
+          <label>용량</label>
+          <input type="text" id="시술수정_용량">
+        </div>
+
+        <div class="시술폼필드">
+          <label>단위</label>
+          <input type="text" id="시술수정_단위">
+        </div>
+
+        <div class="시술폼필드">
+          <label>시술금액</label>
+          <input type="text" id="시술수정_시술금액">
+        </div>
+
+        <div class="시술폼필드">
+          <label>패키지여부</label>
+          <select id="시술수정_패키지여부">
+            <option value="">해당없음</option>
+            <option value="Y">패키지</option>
+          </select>
+        </div>
+
+        <div class="시술폼필드">
+          <label>담당원장</label>
+          <select id="시술수정_담당원장"></select>
+        </div>
+
+        <div class="시술폼필드">
+          <label>담당실장</label>
+          <select id="시술수정_담당실장"></select>
+        </div>
+
+        <div class="시술폼필드">
+          <label>비고</label>
+          <input type="text" id="시술수정_비고">
+        </div>
+
+      </div>
+
+      <div class="시술폼하단">
+        <button class="버튼 버튼보조" onclick="시술_수정폼닫기()">닫기</button>
+        <button class="버튼 버튼주요" onclick="시술_수정저장()">저장</button>
+      </div>
+
+    </div>
+
+    <div class="시술표카드">
+
+      <div class="시술표카드헤더">
+        <div class="제목">시술 내역</div>
+        <div class="우측" id="시술목록_상태">불러오는 중...</div>
+      </div>
+
+      <div class="시술표영역">
+        <table class="시술표" id="시술표">
+          <colgroup>
+            <col style="width:92px"><col style="width:85px"><col style="width:80px">
+            <col style="width:75px"><col style="width:140px"><col style="width:55px">
+            <col style="width:55px"><col style="width:90px"><col style="width:80px">
+            <col style="width:80px"><col style="width:60px"><col style="width:55px"><col style="width:95px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th data-키="시술일"><span class="th_텍스트" onclick="시술_정렬('시술일')">시술일<span class="정렬표시" id="시술정렬_시술일"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="환자번호"><span class="th_텍스트" onclick="시술_정렬('환자번호')">환자번호<span class="정렬표시" id="시술정렬_환자번호"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="환자명"><span class="th_텍스트" onclick="시술_정렬('환자명')">환자명<span class="정렬표시" id="시술정렬_환자명"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="시술구분"><span class="th_텍스트" onclick="시술_정렬('시술구분')">구분<span class="정렬표시" id="시술정렬_시술구분"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="시술명"><span class="th_텍스트" onclick="시술_정렬('시술명')">시술명<span class="정렬표시" id="시술정렬_시술명"></span></span><span class="리사이즈핸들"></span></th>
+              <th><span class="th_텍스트">용량</span><span class="리사이즈핸들"></span></th>
+              <th><span class="th_텍스트">단위</span><span class="리사이즈핸들"></span></th>
+              <th data-키="시술금액"><span class="th_텍스트" onclick="시술_정렬('시술금액')">시술금액<span class="정렬표시" id="시술정렬_시술금액"></span></span><span class="리사이즈핸들"></span></th>
+              <th><span class="th_텍스트">담당원장</span><span class="리사이즈핸들"></span></th>
+              <th><span class="th_텍스트">담당실장</span><span class="리사이즈핸들"></span></th>
+              <th><span class="th_텍스트">패키지</span><span class="리사이즈핸들"></span></th>
+              <th><span class="th_텍스트">상태</span><span class="리사이즈핸들"></span></th>
+              <th><span class="th_텍스트">관리</span></th>
+            </tr>
+          </thead>
+          <tbody id="시술표본문">
+            <tr><td colspan="13"><div class="시술안내">불러오는 중...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  `;
+}
+
+
+function 시술_내역초기화() {
+
+  시술_기준목록불러오기(function() {
+    // 수정폼 드롭다운 채우기
+    document.getElementById('시술수정_시술명').innerHTML = 시술_옵션HTML('시술명', '시술명 선택');
+    document.getElementById('시술수정_담당실장').innerHTML = 시술_옵션HTML('담당실장', '선택');
+    document.getElementById('시술수정_담당원장').innerHTML = 시술_옵션HTML('담당원장', '선택');
+  });
+
+  // 기본: 월별 + 이번 달
+  document.getElementById('시술검색_기간방식').value = '월별';
+  document.getElementById('시술검색_월').value = 시술_오늘문자열().substring(0, 7);
+  시술_기간방식전환();
+
+  시술_목록불러오기(시술_검색조건());
+}
+
+
+/* ================================================================
+   기간 방식 (월별 / 일별 / 기간 지정 / 전체)
+   ================================================================ */
+
+function 시술_기간방식전환() {
+
+  const 방식 = document.getElementById('시술검색_기간방식').value;
+
+  document.getElementById('시술검색_월필드').style.display = 방식 === '월별' ? '' : 'none';
+  document.getElementById('시술검색_일필드').style.display = 방식 === '일별' ? '' : 'none';
+  document.getElementById('시술검색_시작필드').style.display = 방식 === '기간' ? '' : 'none';
+  document.getElementById('시술검색_종료필드').style.display = 방식 === '기간' ? '' : 'none';
+}
+
+
+/* 선택된 기간 방식 → 시작일/종료일 환산 */
+function 시술_기간계산() {
+
+  const 방식 = document.getElementById('시술검색_기간방식').value;
+
+  if (방식 === '월별') {
+
+    const v = document.getElementById('시술검색_월').value; // 'yyyy-MM'
+
+    if (!v) {
+      return { 시작일: '', 종료일: '' };
+    }
+
+    const y = parseInt(v.substring(0, 4), 10);
+    const m = parseInt(v.substring(5, 7), 10);
+    const 말일 = new Date(y, m, 0).getDate(); // 해당 월 마지막 날
+
+    return {
+      시작일: v + '-01',
+      종료일: v + '-' + ('0' + 말일).slice(-2)
+    };
+  }
+
+  if (방식 === '일별') {
+    const v = document.getElementById('시술검색_일').value;
+    return { 시작일: v, 종료일: v };
+  }
+
+  if (방식 === '기간') {
+    return {
+      시작일: document.getElementById('시술검색_시작일').value,
+      종료일: document.getElementById('시술검색_종료일').value
+    };
+  }
+
+  return { 시작일: '', 종료일: '' }; // 전체
+}
+
+
+/* "오늘" 버튼 — 일별 + 오늘 날짜로 즉시 조회 */
+function 시술_오늘조회() {
+
+  document.getElementById('시술검색_기간방식').value = '일별';
+  document.getElementById('시술검색_일').value = 시술_오늘문자열();
+  시술_기간방식전환();
+
+  시술_목록불러오기(시술_검색조건());
+}
+
+
+/* ================================================================
+   목록 조회
+   ================================================================ */
+
+function 시술_검색조건() {
+
+  const 기간 = 시술_기간계산();
+
+  return {
+    시작일: 기간.시작일,
+    종료일: 기간.종료일,
+    환자번호: document.getElementById('시술검색_환자번호').value.trim(),
+    환자명: document.getElementById('시술검색_환자명').value.trim(),
+    시술구분: document.getElementById('시술검색_구분').value,
+    취소포함: document.getElementById('시술검색_취소포함').value === 'true',
+    최대건수: 200
+  };
+}
+
+
+function 시술_목록불러오기(조건) {
+
+  const 상태 = document.getElementById('시술목록_상태');
+
+  if (상태) {
+    상태.textContent = '불러오는 중...';
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      시술_원본목록 = 목록 || [];
+      시술_테이블렌더();
+
+      if (상태) {
+        상태.textContent = 시술_원본목록.length + '건';
+      }
+    })
+
+    .withFailureHandler(function(error) {
+
+      if (상태) {
+        상태.textContent = '조회 실패';
+      }
+
+      alert('시술 목록을 불러오지 못했습니다.\n' + (error && error.message ? error.message : error));
+    })
+
+    .PROC_getList(현재세션.token, 조건 || { 최대건수: 200 });
+}
+
+
+function 시술_검색() {
+
+  시술_목록불러오기(시술_검색조건());
+}
+
+
+function 시술_검색초기화() {
+
+  document.getElementById('시술검색_기간방식').value = '월별';
+  document.getElementById('시술검색_월').value = 시술_오늘문자열().substring(0, 7);
+  document.getElementById('시술검색_일').value = '';
+  document.getElementById('시술검색_시작일').value = '';
+  document.getElementById('시술검색_종료일').value = '';
+  document.getElementById('시술검색_환자번호').value = '';
+  document.getElementById('시술검색_환자명').value = '';
+  document.getElementById('시술검색_구분').value = '';
+  document.getElementById('시술검색_취소포함').value = 'false';
+  시술_기간방식전환();
+
+  시술_목록불러오기(시술_검색조건());
+}
+
+
+/* ================================================================
+   정렬
+   ================================================================ */
+
+function 시술_정렬(키) {
+
+  if (시술_정렬상태.키 === 키) {
+    시술_정렬상태.방향 = -시술_정렬상태.방향;
+  } else {
+    시술_정렬상태 = { 키: 키, 방향: 1 };
+  }
+
+  document.querySelectorAll('.시술표 .정렬표시').forEach(function(el) {
+    el.textContent = '';
+    el.classList.remove('활성');
+  });
+
+  const 표시 = document.getElementById('시술정렬_' + 키);
+
+  if (표시) {
+    표시.textContent = 시술_정렬상태.방향 === 1 ? ' ▲' : ' ▼';
+    표시.classList.add('활성');
+  }
+
+  시술_테이블렌더();
+}
+
+
+/* ================================================================
+   테이블 렌더 (내역 화면)
+   ================================================================ */
+
+function 시술_테이블렌더() {
+
+  const tbody = document.getElementById('시술표본문');
+
+  if (!tbody) {
+    return;
+  }
+
+  let 목록 = 시술_원본목록.slice();
+
+  if (시술_정렬상태.키) {
+
+    const 키 = 시술_정렬상태.키;
+    const 방향 = 시술_정렬상태.방향;
+
+    목록.sort(function(a, b) {
+
+      const va = 키 === '시술금액' ? Number(a[키]) : String(a[키] || '');
+      const vb = 키 === '시술금액' ? Number(b[키]) : String(b[키] || '');
+
+      if (va < vb) return -방향;
+      if (va > vb) return 방향;
+      return 0;
+    });
+  }
+
+  if (목록.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="13"><div class="시술안내">조회된 시술이 없습니다.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = 목록.map(function(r) {
+
+    const 취소됨 = r.상태 === '취소';
+
+    return '<tr>' +
+      '<td>' + 시술_escape(r.시술일) + '</td>' +
+      '<td>' + 시술_escape(r.환자번호) + '</td>' +
+      '<td>' + 시술_escape(r.환자명) + '</td>' +
+      '<td>' + 시술_escape(r.시술구분) + '</td>' +
+      '<td title="' + 시술_escape(r.시술명) + '">' + 시술_escape(r.시술명) + '</td>' +
+      '<td class="우">' + 시술_escape(r.용량) + '</td>' +
+      '<td>' + 시술_escape(r.단위) + '</td>' +
+      '<td class="우">' + 시술_금액표시(r.시술금액) + '</td>' +
+      '<td>' + 시술_escape(r.담당원장) + '</td>' +
+      '<td>' + 시술_escape(r.담당실장) + '</td>' +
+      '<td>' + (r.패키지여부 === 'Y' ? 'Y' : '') + '</td>' +
+      '<td>' + (취소됨
+        ? '<span class="시술취소텍스트">취소</span>'
+        : 시술_escape(r.상태)) + '</td>' +
+      '<td>' +
+        '<span class="시술링크" onclick="시술_수정폼열기(\'' + 시술_escape(r.시술ID) + '\')">수정</span>' +
+        (취소됨
+          ? '<span class="시술링크" onclick="시술_취소처리(\'' + 시술_escape(r.시술ID) + '\', false)">취소해제</span>'
+          : '<span class="시술링크" onclick="시술_취소처리(\'' + 시술_escape(r.시술ID) + '\', true)">취소</span>') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+
+/* ================================================================
+   수정 폼
+   ================================================================ */
+
+function 시술_수정폼열기(시술ID) {
+
+  const r = 시술_원본목록.find(function(x) { return x.시술ID === 시술ID; });
+
+  if (!r) {
+    return;
+  }
+
+  document.getElementById('시술수정_시술ID').value = r.시술ID;
+  document.getElementById('시술수정_ID표시').textContent =
+    r.시술ID + ' (' + r.등록묶음ID + ' / ' + r.시술구분 + ')';
+  document.getElementById('시술수정_환자번호').value = r.환자번호;
+  document.getElementById('시술수정_환자명').value = r.환자명;
+  document.getElementById('시술수정_시술일').value = r.시술일;
+  document.getElementById('시술수정_용량').value = r.용량;
+  document.getElementById('시술수정_단위').value = r.단위;
+  document.getElementById('시술수정_시술금액').value = r.시술금액;
+  document.getElementById('시술수정_패키지여부').value = r.패키지여부 === 'Y' ? 'Y' : '';
+  document.getElementById('시술수정_비고').value = r.비고;
+
+  // 드롭다운: 기존 값이 목록에 없으면 "(목록없음)"으로 표시 (저장 시 차단)
+  시술_셀렉트값설정(document.getElementById('시술수정_시술명'), r.시술명);
+  시술_셀렉트값설정(document.getElementById('시술수정_담당실장'), r.담당실장);
+  시술_셀렉트값설정(document.getElementById('시술수정_담당원장'), r.담당원장);
+
+  const 폼 = document.getElementById('시술수정폼');
+  폼.classList.add('열림');
+  폼.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+
+function 시술_수정폼닫기() {
+
+  document.getElementById('시술수정폼').classList.remove('열림');
+}
+
+
+function 시술_수정저장() {
+
+  // 목록없음 값 차단
+  const 검사대상 = [
+    ['시술명', document.getElementById('시술수정_시술명')],
+    ['담당실장', document.getElementById('시술수정_담당실장')],
+    ['담당원장', document.getElementById('시술수정_담당원장')]
+  ];
+
+  for (let i = 0; i < 검사대상.length; i++) {
+    const sel = 검사대상[i][1];
+    const opt = sel.options[sel.selectedIndex];
+    if (opt && opt.dataset.목록없음) {
+      alert(검사대상[i][0] + ' "' + sel.value + '"은(는) 기준정보 목록에 없습니다.\n관리 > 거래처/기본정보에서 먼저 등록하거나 목록에서 선택해주세요.');
+      return;
+    }
+  }
+
+  const data = {
+    시술ID: document.getElementById('시술수정_시술ID').value,
+    환자번호: document.getElementById('시술수정_환자번호').value.trim(),
+    환자명: document.getElementById('시술수정_환자명').value.trim(),
+    시술일: document.getElementById('시술수정_시술일').value,
+    시술명: document.getElementById('시술수정_시술명').value,
+    용량: document.getElementById('시술수정_용량').value.trim(),
+    단위: document.getElementById('시술수정_단위').value.trim(),
+    시술금액: document.getElementById('시술수정_시술금액').value,
+    패키지여부: document.getElementById('시술수정_패키지여부').value,
+    담당원장: document.getElementById('시술수정_담당원장').value,
+    담당실장: document.getElementById('시술수정_담당실장').value,
+    비고: document.getElementById('시술수정_비고').value.trim()
+  };
+
+  if (!data.환자번호 || !data.시술명) {
+    alert('환자번호와 시술명은 모두 입력해야 합니다.');
+    return;
+  }
+
+  if (!data.시술일) {
+    alert('시술일을 입력해주세요.');
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+
+      시술_수정폼닫기();
+      시술_목록불러오기(시술_검색조건());
+    })
+
+    .withFailureHandler(function(error) {
+      alert('수정에 실패했습니다.\n' + (error && error.message ? error.message : error));
+    })
+
+    .PROC_update(현재세션.token, data);
+}
+
+
+/* ================================================================
+   취소 / 취소 해제 (논리 삭제)
+   ================================================================ */
+
+function 시술_취소처리(시술ID, 취소여부) {
+
+  const 문구 = 취소여부
+    ? '이 시술을 취소 처리할까요?\n(기록은 유지되며 목록·집계에서 제외됩니다)'
+    : '취소를 해제하고 완료 상태로 되돌릴까요?';
+
+  if (!confirm(문구)) {
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+
+      시술_목록불러오기(시술_검색조건());
+    })
+
+    .withFailureHandler(function(error) {
+      alert('처리에 실패했습니다.\n' + (error && error.message ? error.message : error));
+    })
+
+    .PROC_취소(현재세션.token, 시술ID, !취소여부 ? false : true);
+}
+
+
+/* ================================================================
+   시술표 컬럼 리사이즈 (품목표와 동일 패턴)
+   ================================================================ */
+
+function 시술표_컬럼리사이즈초기화() {
+
+  const 표 = document.getElementById('시술표');
+
+  if (!표) {
+    return;
+  }
+
+  const cols = 표.querySelectorAll('colgroup col');
+  const ths = 표.querySelectorAll('thead th');
+
+  // 저장된 너비 불러오기
+  try {
+
+    const 저장 = JSON.parse(localStorage.getItem('시술표_컬럼너비_v2') || 'null');
+
+    if (Array.isArray(저장)) {
+      저장.forEach(function(w, i) {
+        if (w && cols[i]) {
+          cols[i].style.width = w + 'px';
+        }
+      });
+    }
+
+  } catch (e) { /* 무시 */ }
+
+  function 너비저장() {
+
+    const 값 = Array.prototype.map.call(cols, function(col) {
+      return parseInt(col.style.width, 10) || null;
+    });
+
+    try {
+      localStorage.setItem('시술표_컬럼너비_v2', JSON.stringify(값));
+    } catch (e) { /* 무시 */ }
+  }
+
+  ths.forEach(function(th, index) {
+
+    const 핸들 = th.querySelector('.리사이즈핸들');
+
+    if (!핸들) {
+      return;
+    }
+
+    핸들.addEventListener('mousedown', function(e) {
+
+      e.preventDefault();
+
+      const 시작X = e.clientX;
+      const 시작너비 = cols[index].offsetWidth || parseInt(cols[index].style.width, 10) || 100;
+
+      function 이동(ev) {
+        const 새너비 = Math.max(40, 시작너비 + (ev.clientX - 시작X));
+        cols[index].style.width = 새너비 + 'px';
+      }
+
+      function 종료() {
+        document.removeEventListener('mousemove', 이동);
+        document.removeEventListener('mouseup', 종료);
+        너비저장();
+      }
+
+      document.addEventListener('mousemove', 이동);
+      document.addEventListener('mouseup', 종료);
+    });
+  });
+}
+
+
+/* ================================================================
+   시술 등록 화면 (전 구분 공통)
+   ================================================================ */
+
+function 시술_등록화면() {
+
+  return `
+    <div class="시술폼카드">
+
+      <div class="카드제목">공통 항목</div>
+
+      <div class="시술공통줄">
+
+        <div class="필드">
+          <label>시술일</label>
+          <input type="date" id="시술등록_시술일">
+        </div>
+
+        <div class="필드">
+          <label>시술구분</label>
+          <select id="시술등록_구분">
+            <option value="일반">일반</option>
+            <option value="회원권">회원권</option>
+            <option value="체험단무료">체험단무료</option>
+            <option value="다회차">다회차</option>
+          </select>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="시술폼카드">
+
+      <div class="카드제목">시술 입력</div>
+
+      <div class="시술도구줄">
+        <button class="버튼 버튼보조" onclick="document.getElementById('시술CSV파일').click()">CSV 파일 불러오기</button>
+        <input type="file" id="시술CSV파일" class="시술숨김파일" accept=".csv" onchange="시술_CSV선택(this)">
+        <button class="버튼 버튼보조" onclick="시술_행추가()">행 추가</button>
+        <button class="버튼 버튼보조" onclick="시술_입력표비우기()">입력표 비우기</button>
+      </div>
+
+      <div class="시술도구안내">
+        열 순서(고정): <code>환자번호</code> <code>환자명</code> <code>담당실장</code> <code>담당원장</code> <code>시술명</code> <code>용량</code> <code>단위</code> <code>시술금액</code> <code>비고</code> <code>패키지여부</code><br>
+        시술명·담당실장·담당원장·패키지여부는 드롭다운에서만 선택합니다. 목록 추가는 관리 &gt; 거래처/기본정보에서 합니다.<br>
+        원가표 행을 복사해 1번째 칸에 붙여넣으면 자동으로 맞춰 넣습니다. 목록에 없는 값은 빨간 <code>(목록없음)</code>으로 표시되고 저장이 차단됩니다.
+      </div>
+
+      <div class="시술입력표영역">
+        <table class="시술입력표">
+          <colgroup>
+            <col style="width:40px"><col style="width:95px"><col style="width:85px">
+            <col style="width:95px"><col style="width:95px"><col style="width:165px">
+            <col style="width:58px"><col style="width:58px"><col style="width:92px">
+            <col><col style="width:92px"><col style="width:55px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>No</th><th>환자번호</th><th>환자명</th><th>담당실장</th><th>담당원장</th>
+              <th>시술명</th><th>용량</th><th>단위</th><th>시술금액</th><th>비고</th>
+              <th>패키지여부</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="시술입력표본문"></tbody>
+        </table>
+      </div>
+
+      <div class="시술등록하단">
+        <div class="건수" id="시술등록_건수">총 0건 입력됨</div>
+        <div class="버튼들">
+          <button class="버튼 버튼주요" id="시술등록_저장버튼" onclick="시술_저장()">저장</button>
+        </div>
+      </div>
+
+      <div class="시술상태" id="시술등록_상태"></div>
+
+    </div>
+  `;
+}
+
+
+/* ================================================================
+   등록 초기화 (페이지렌더링에서 호출)
+   기준정보 목록을 먼저 불러온 뒤 입력표를 만든다
+   ================================================================ */
+
+function 시술_등록초기화() {
+
+  document.getElementById('시술등록_시술일').value = 시술_오늘문자열();
+  document.getElementById('시술등록_구분').value = '일반';
+
+  const 상태 = document.getElementById('시술등록_상태');
+  상태.className = '시술상태 성공';
+  상태.textContent = '기준정보 목록 불러오는 중...';
+
+  시술_기준목록불러오기(function() {
+
+    상태.className = '시술상태';
+    상태.textContent = '';
+
+    시술_입력표비우기();
+  });
+}
+
+
+/* ================================================================
+   입력표 행 관리
+   ================================================================ */
+
+function 시술_행추가() {
+
+  const tbody = document.getElementById('시술입력표본문');
+  const tr = document.createElement('tr');
+
+  const 번호칸 = document.createElement('td');
+  번호칸.className = '번호칸';
+  tr.appendChild(번호칸);
+
+  for (let c = 0; c < 시술_입력열.length; c++) {
+
+    const td = document.createElement('td');
+    let el;
+
+    if (시술_셀형태[c] === '패키지') {
+
+      el = document.createElement('select');
+      el.innerHTML = '<option value="">해당없음</option><option value="Y">패키지</option>';
+
+    } else if (시술_셀형태[c]) {
+
+      el = document.createElement('select');
+      el.innerHTML = 시술_옵션HTML(시술_셀형태[c], c === 4 ? '시술명 선택' : '선택');
+
+      el.addEventListener('change', function() {
+        // 목록에 있는 값으로 바꾸면 오류 표시 제거
+        const opt = this.options[this.selectedIndex];
+        if (!opt || !opt.dataset.목록없음) {
+          this.classList.remove('시술오류칸');
+          Array.prototype.slice.call(this.querySelectorAll('option[data-목록없음]'))
+            .forEach(function(o) { o.remove(); });
+        }
+        시술_건수갱신();
+      });
+
+    } else {
+
+      el = document.createElement('input');
+      el.type = 'text';
+      el.addEventListener('paste', 시술_붙여넣기처리);
+      el.addEventListener('input', 시술_건수갱신);
+    }
+
+    el.dataset.col = c;
+    td.appendChild(el);
+    tr.appendChild(td);
+  }
+
+  const 삭제칸 = document.createElement('td');
+  const 삭제 = document.createElement('span');
+
+  삭제.className = '행삭제';
+  삭제.textContent = '삭제';
+  삭제.onclick = function() {
+    tr.remove();
+    시술_행번호매기기();
+    시술_건수갱신();
+  };
+
+  삭제칸.appendChild(삭제);
+  tr.appendChild(삭제칸);
+
+  tbody.appendChild(tr);
+  시술_행번호매기기();
+
+  return tr;
+}
+
+
+function 시술_행번호매기기() {
+
+  document.querySelectorAll('#시술입력표본문 tr').forEach(function(tr, i) {
+    tr.querySelector('.번호칸').textContent = i + 1;
+  });
+}
+
+
+function 시술_입력표비우기() {
+
+  document.getElementById('시술입력표본문').innerHTML = '';
+
+  for (let i = 0; i < 5; i++) {
+    시술_행추가();
+  }
+
+  시술_건수갱신();
+}
+
+
+/* 행의 셀 요소들 (입력칸 + 셀렉트, 열 순서대로) */
+function 시술_행셀들(tr) {
+
+  return tr.querySelectorAll('input, select');
+}
+
+
+function 시술_건수갱신() {
+
+  let count = 0;
+
+  document.querySelectorAll('#시술입력표본문 tr').forEach(function(tr) {
+
+    const 셀 = 시술_행셀들(tr);
+
+    // 환자번호(0), 시술명(4)이 모두 있는 행만 집계
+    if (셀[0].value.trim() && 셀[4].value.trim()) {
+      count++;
+    }
+  });
+
+  const el = document.getElementById('시술등록_건수');
+
+  if (el) {
+    el.textContent = '총 ' + count + '건 입력됨 (환자번호·시술명이 모두 있는 행 기준)';
+  }
+}
+
+
+/* ================================================================
+   붙여넣기 셀 매핑 (원가표 열 구조 자동 인식)
+
+   입력표 열(10): 환자번호 환자명 담당실장 담당원장 시술명 용량 단위 시술금액 비고 패키지여부
+   원가표 전체(15): 시술월 시술일 환자번호 환자명 담당실장 담당의 시술명 용량 단위
+                    매출금액 매출원가 원가율 비고 패키지여부 분류
+   원가표 부분(12~13): 환자번호부터 (매출원가/원가율/분류 포함)
+
+   1번째 칸(환자번호)에 붙여넣을 때만 자동 인식한다.
+   ================================================================ */
+
+function 시술_붙여넣기셀매핑(cells, 시작열) {
+
+  if (시작열 !== 0) {
+    return cells;
+  }
+
+  // 원가표 전체 행 (시술월/시술일 포함, 15열 이상)
+  if (cells.length >= 15) {
+    return [2, 3, 4, 5, 6, 7, 8, 9, 12, 13].map(function(i) {
+      return cells[i] === undefined ? '' : cells[i];
+    });
+  }
+
+  // 원가표 환자번호부터 (매출원가/원가율 포함, 12~13열)
+  if (cells.length >= 12) {
+    return [0, 1, 2, 3, 4, 5, 6, 7, 10, 11].map(function(i) {
+      return cells[i] === undefined ? '' : cells[i];
+    });
+  }
+
+  return cells;
+}
+
+
+/* ================================================================
+   엑셀 붙여넣기 (Ctrl+V)
+   ================================================================ */
+
+function 시술_붙여넣기처리(e) {
+
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+
+  // 탭/줄바꿈 없는 단일 값은 기본 붙여넣기 동작 유지
+  if (!text || (text.indexOf('\t') === -1 && text.indexOf('\n') === -1)) {
+    return;
+  }
+
+  e.preventDefault();
+
+  const 시작행 = e.target.closest('tr');
+  const 시작열 = parseInt(e.target.dataset.col, 10);
+
+  let 행들 = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n');
+
+  if (행들.length && 행들[행들.length - 1] === '') {
+    행들.pop();
+  }
+
+  // 헤더 행 제외 (입력표 순서 또는 원가표 순서)
+  if (행들.length) {
+    const 첫칸 = 행들[0].split('\t')[0].trim();
+    if (첫칸 === '환자번호' || 첫칸 === '시술월') {
+      행들.shift();
+    }
+  }
+
+  const tbody = document.getElementById('시술입력표본문');
+  const 시작인덱스 = Array.prototype.indexOf.call(tbody.querySelectorAll('tr'), 시작행);
+
+  행들.forEach(function(line, r) {
+
+    let 대상행 = tbody.querySelectorAll('tr')[시작인덱스 + r];
+
+    if (!대상행) {
+      대상행 = 시술_행추가();
+    }
+
+    const 셀 = 시술_행셀들(대상행);
+    const cells = 시술_붙여넣기셀매핑(line.split('\t'), 시작열);
+
+    cells.forEach(function(v, c) {
+
+      const 열 = 시작열 + c;
+
+      if (열 < 시술_입력열.length) {
+        시술_셀값설정(셀[열], 열, v);
+      }
+    });
+  });
+
+  시술_건수갱신();
+}
+
+
+/* ================================================================
+   CSV 업로드
+   ================================================================ */
+
+function 시술_CSV선택(fileInput) {
+
+  const file = fileInput.files[0];
+
+  if (!file) {
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = function(ev) {
+
+    const buf = ev.target.result;
+
+    let text = new TextDecoder('utf-8').decode(buf);
+
+    // 깨진 문자가 있으면 엑셀 CP949 저장으로 보고 재디코딩
+    if (text.indexOf('�') !== -1) {
+      try {
+        text = new TextDecoder('euc-kr').decode(buf);
+      } catch (e) { /* euc-kr 미지원 환경이면 utf-8 결과 유지 */ }
+    }
+
+    시술_CSV채우기(text);
+    fileInput.value = '';
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+
+function 시술_CSV파싱(text) {
+
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let inQ = false;
+
+  for (let i = 0; i < text.length; i++) {
+
+    const ch = text[i];
+
+    if (inQ) {
+
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQ = false;
+        }
+      } else {
+        cur += ch;
+      }
+
+    } else {
+
+      if (ch === '"') {
+        inQ = true;
+      } else if (ch === ',') {
+        row.push(cur);
+        cur = '';
+      } else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') {
+          i++;
+        }
+        row.push(cur);
+        rows.push(row);
+        row = [];
+        cur = '';
+      } else {
+        cur += ch;
+      }
+    }
+  }
+
+  if (cur !== '' || row.length) {
+    row.push(cur);
+    rows.push(row);
+  }
+
+  return rows.filter(function(r) {
+    return r.some(function(v) { return String(v).trim() !== ''; });
+  });
+}
+
+
+function 시술_CSV채우기(text) {
+
+  let rows = 시술_CSV파싱(text);
+
+  if (!rows.length) {
+    alert('CSV에서 데이터를 찾지 못했습니다.');
+    return;
+  }
+
+  const 첫칸 = String(rows[0][0] || '').trim();
+
+  if (첫칸 === '환자번호' || 첫칸 === '시술월') {
+    rows.shift();
+  }
+
+  if (!rows.length) {
+    alert('CSV에 데이터 행이 없습니다.');
+    return;
+  }
+
+  if (!confirm('현재 입력표 내용을 CSV 데이터 ' + rows.length + '행으로 대체합니다. 진행할까요?')) {
+    return;
+  }
+
+  const tbody = document.getElementById('시술입력표본문');
+  tbody.innerHTML = '';
+
+  rows.forEach(function(r) {
+
+    const tr = 시술_행추가();
+    const 셀 = 시술_행셀들(tr);
+    const cells = 시술_붙여넣기셀매핑(r, 0);
+
+    for (let c = 0; c < 시술_입력열.length; c++) {
+      시술_셀값설정(셀[c], c, cells[c] === undefined ? '' : cells[c]);
+    }
+  });
+
+  시술_건수갱신();
+}
+
+
+/* ================================================================
+   저장 (일괄)
+   ================================================================ */
+
+function 시술_저장() {
+
+  const 상태 = document.getElementById('시술등록_상태');
+  상태.className = '시술상태';
+  상태.textContent = '';
+
+  const 시술일 = document.getElementById('시술등록_시술일').value;
+  const 시술구분 = document.getElementById('시술등록_구분').value;
+
+  if (!시술일) {
+    상태.className = '시술상태 오류';
+    상태.textContent = '시술일을 입력해주세요.';
+    return;
+  }
+
+  if (시술_구분목록.indexOf(시술구분) === -1) {
+    상태.className = '시술상태 오류';
+    상태.textContent = '시술구분을 선택해주세요.';
+    return;
+  }
+
+  const 행목록 = [];
+  const 오류들 = [];
+
+  document.querySelectorAll('#시술입력표본문 tr').forEach(function(tr, i) {
+
+    const 셀 = 시술_행셀들(tr);
+    const 환자번호 = 셀[0].value.trim();
+    const 시술명 = 셀[4].value.trim();
+
+    if (!환자번호 && !시술명) {
+      return; // 빈 행
+    }
+
+    if (!환자번호 || !시술명) {
+      오류들.push((i + 1) + '번 행: 환자번호와 시술명은 모두 입력해야 합니다.');
+      return;
+    }
+
+    // 목록없음 값 차단 (드롭다운 칸)
+    let 목록오류 = false;
+
+    [2, 3, 4].forEach(function(c) {
+      const sel = 셀[c];
+      const opt = sel.options[sel.selectedIndex];
+      if (opt && opt.dataset.목록없음) {
+        오류들.push((i + 1) + '번 행: ' + 시술_입력열[c] + ' "' + sel.value +
+          '"은(는) 기준정보 목록에 없습니다. 관리 > 거래처/기본정보에서 먼저 등록해주세요.');
+        목록오류 = true;
+      }
+    });
+
+    if (목록오류) {
+      return;
+    }
+
+    행목록.push({
+      환자번호: 환자번호,
+      환자명: 셀[1].value.trim(),
+      담당실장: 셀[2].value,
+      담당원장: 셀[3].value,
+      시술명: 시술명,
+      용량: 셀[5].value.trim(),
+      단위: 셀[6].value.trim(),
+      시술금액: 셀[7].value.trim(),
+      비고: 셀[8].value.trim(),
+      패키지여부: 셀[9].value
+    });
+  });
+
+  if (오류들.length) {
+    상태.className = '시술상태 오류';
+    상태.textContent = 오류들.join('\n');
+    return;
+  }
+
+  if (!행목록.length) {
+    상태.className = '시술상태 오류';
+    상태.textContent = '저장할 시술 내역이 없습니다.';
+    return;
+  }
+
+  const 버튼 = document.getElementById('시술등록_저장버튼');
+  버튼.disabled = true;
+  상태.className = '시술상태 성공';
+  상태.textContent = '저장 중...';
+
+  google.script.run
+
+    .withSuccessHandler(function(결과) {
+
+      버튼.disabled = false;
+      상태.className = '시술상태 성공';
+      상태.textContent =
+        결과.저장건수 + '건이 저장되었습니다. (' + 시술구분 + ') 등록묶음ID: ' + 결과.등록묶음ID;
+
+      시술_입력표비우기();
+    })
+
+    .withFailureHandler(function(error) {
+
+      버튼.disabled = false;
+      상태.className = '시술상태 오류';
+      상태.textContent = '저장 실패: ' + (error && error.message ? error.message : error);
+    })
+
+    .PROC_saveBatch(
+      현재세션.token,
+      { 시술일: 시술일, 시술구분: 시술구분 },
+      행목록
+    );
+}
+</script>

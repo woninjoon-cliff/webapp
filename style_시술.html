@@ -1,0 +1,490 @@
+<style>
+/* =====================================================================
+   style_시술.html — 시술 도메인 스타일
+   (공용 .버튼 / .버튼주요 / .버튼보조 / .정렬표시 / .리사이즈핸들 은
+    style_품목.html 에 정의돼 있으므로 재정의하지 않는다)
+   ===================================================================== */
+
+
+/* ================= 요약 카드 ================= */
+
+.시술요약그리드 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.시술요약카드 .숫자.미연결 {
+  font-size: 14px;
+  color: #8b849d;
+  font-weight: 600;
+}
+
+.시술요약카드 {
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.시술요약카드 .라벨 {
+  font-size: 12px;
+  color: #8b849d;
+}
+
+.시술요약카드 .숫자 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #40385f;
+  margin-top: 6px;
+}
+
+.시술요약카드 .숫자.작게 {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.시술요약카드 .설명 {
+  font-size: 11px;
+  color: #8b849d;
+  margin-top: 4px;
+}
+
+
+/* ================= 검색 바 ================= */
+
+.시술검색바 {
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 13px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+
+.시술검색바 .필드 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.시술검색바 label {
+  font-size: 11px;
+  color: #8b849d;
+}
+
+.시술검색바 input,
+.시술검색바 select {
+  border: 1px solid #eeeaf5;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #40385f;
+  background: #fff;
+}
+
+.시술검색바 input:focus,
+.시술검색바 select:focus {
+  outline: 1px solid #8064d8;
+}
+
+
+/* ================= 목록 카드 / 표 ================= */
+
+.시술표카드 {
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.시술표카드헤더 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.시술표카드헤더 .제목 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #40385f;
+}
+
+.시술표카드헤더 .우측 {
+  font-size: 12px;
+  color: #8b849d;
+}
+
+.시술표영역 {
+  overflow-x: auto;
+}
+
+/* 금일 시술 (메인) — 많아지면 카드 안에서 스크롤 */
+.시술금일영역 {
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.시술금일영역 thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.시술표 {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.시술표 thead th {
+  background: #f6f2fe;
+  padding: 9px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #40385f;
+  border-right: 1px solid #8b849d;
+  position: relative;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.시술표 thead th:last-child {
+  border-right: none;
+}
+
+.시술표 thead th > .th_텍스트 {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.시술표 tbody td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #f1edf9;
+  border-right: 1px solid #ece6f7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #40385f;
+}
+
+.시술표 tbody td:last-child {
+  border-right: none;
+}
+
+.시술표 tbody tr:hover {
+  background: #faf8fe;
+}
+
+.시술표 .우 {
+  text-align: right;
+}
+
+.시술링크 {
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.시술링크 + .시술링크 {
+  margin-left: 10px;
+}
+
+.시술취소텍스트 {
+  color: #d92d20;
+  font-weight: 600;
+}
+
+.시술안내 {
+  padding: 24px 0;
+  text-align: center;
+  color: #8b849d;
+  font-size: 13px;
+}
+
+
+/* ================= 수정 폼 ================= */
+
+.시술수정폼 {
+  display: none;
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.시술수정폼.열림 {
+  display: block;
+}
+
+.시술수정폼 .폼제목 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #40385f;
+  margin-bottom: 12px;
+}
+
+.시술수정그리드 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.시술폼필드 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.시술폼필드 label {
+  font-size: 11px;
+  color: #8b849d;
+}
+
+.시술폼필드 label .필수 {
+  color: #d92d20;
+}
+
+.시술폼필드 input,
+.시술폼필드 select {
+  border: 1px solid #eeeaf5;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #40385f;
+  background: #fff;
+}
+
+.시술폼필드 input:focus,
+.시술폼필드 select:focus {
+  outline: 1px solid #8064d8;
+}
+
+.시술폼하단 {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+
+/* ================= 등록 화면 ================= */
+
+.시술폼카드 {
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.시술폼카드 .카드제목 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #40385f;
+  margin-bottom: 13px;
+}
+
+.시술공통줄 {
+  display: flex;
+  gap: 18px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.시술공통줄 .필드 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.시술공통줄 label {
+  font-size: 11px;
+  color: #8b849d;
+}
+
+.시술공통줄 input,
+.시술공통줄 select {
+  border: 1px solid #eeeaf5;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #40385f;
+  background: #fff;
+}
+
+.시술공통줄 input:focus,
+.시술공통줄 select:focus {
+  outline: 1px solid #8064d8;
+}
+
+.시술공통줄 input[readonly] {
+  background: #f7f5fc;
+  color: #8b849d;
+}
+
+.시술도구줄 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+}
+
+.시술도구안내 {
+  font-size: 12px;
+  color: #8b849d;
+  margin-bottom: 12px;
+  line-height: 1.7;
+}
+
+.시술도구안내 code {
+  background: #f6f2fe;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #8064d8;
+}
+
+.시술입력표영역 {
+  overflow-x: auto;
+}
+
+.시술입력표 {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.시술입력표 th {
+  background: #f6f2fe;
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #40385f;
+  border: 1px solid #ece6f7;
+  white-space: nowrap;
+}
+
+.시술입력표 td {
+  border: 1px solid #ece6f7;
+  padding: 0;
+}
+
+.시술입력표 td.번호칸 {
+  text-align: center;
+  color: #8b849d;
+  font-size: 12px;
+  background: #faf8fe;
+  padding: 8px 0;
+}
+
+.시술입력표 input {
+  width: 100%;
+  border: none;
+  padding: 8px;
+  font-size: 13px;
+  color: #40385f;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.시술입력표 input:focus {
+  outline: 2px solid #8064d8;
+  outline-offset: -2px;
+}
+
+.시술입력표 select {
+  width: 100%;
+  border: none;
+  padding: 7px 4px;
+  font-size: 13px;
+  color: #40385f;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.시술입력표 select:focus {
+  outline: 2px solid #8064d8;
+  outline-offset: -2px;
+}
+
+/* 기준정보 목록에 없는 값 (저장 차단 대상) */
+.시술입력표 select.시술오류칸,
+.시술수정폼 select.시술오류칸 {
+  color: #d92d20;
+  font-weight: 600;
+  background: #fef1f0;
+}
+
+.시술입력표 .행삭제 {
+  display: block;
+  text-align: center;
+  color: #d92d20;
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: 12px;
+}
+
+.시술등록하단 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.시술등록하단 .건수 {
+  font-size: 13px;
+  color: #8b849d;
+}
+
+.시술등록하단 .버튼들 {
+  display: flex;
+  gap: 8px;
+}
+
+.시술상태 {
+  margin-top: 10px;
+  font-size: 13px;
+  display: none;
+}
+
+.시술상태.성공 {
+  display: block;
+  color: #40385f;
+}
+
+.시술상태.오류 {
+  display: block;
+  color: #d92d20;
+  white-space: pre-line;
+}
+
+.시술숨김파일 {
+  display: none;
+}
+
+
+/* ================= 반응형 ================= */
+
+@media (max-width: 1000px) {
+
+  .시술요약그리드 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .시술수정그리드 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>

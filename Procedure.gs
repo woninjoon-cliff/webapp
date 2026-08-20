@@ -1,0 +1,911 @@
+// =====================================================================
+// Procedure.gs — 시술 도메인 서버 함수 (PROC_*)
+//
+// - 대상 시트: 05_시술 (18열, 용량/단위/시술금액/패키지여부 포함)
+// - 모든 공개 함수는 첫 인자로 세션 토큰을 받는다
+// - 병원별 데이터 분리: 세션 병원ID로 필터·검증
+// - 물리 삭제 없음: 취소는 상태 = '취소' (논리 삭제)
+// - 이번 단계 저장 범위: 05_시술만 (06_시술사용품목은 LOT/재고 구현 후)
+// - 원가(매출원가/원가율)는 저장하지 않는다: FIFO 재고 연동 후 계산 (미연결)
+// =====================================================================
+
+
+// =====================================================================
+// 상수
+// =====================================================================
+
+var PROC_시술구분목록 = ['일반', '회원권', '체험단무료', '다회차'];
+
+var PROC_상태_완료 = '완료';
+var PROC_상태_취소 = '취소';
+
+var PROC_새헤더 = [
+  '시술ID',
+  '등록묶음ID',
+  '병원ID',
+  '환자번호',
+  '환자명',
+  '시술일',
+  '시술구분',
+  '시술명',
+  '용량',
+  '단위',
+  '시술금액',
+  '담당원장',
+  '담당실장',
+  '비고',
+  '패키지여부',
+  '상태',
+  '등록일시',
+  '수정일시'
+];
+
+
+// =====================================================================
+// 세션 확인 (내부 헬퍼)
+// =====================================================================
+
+function PROC_세션확인_(token) {
+
+  var session = AUTH_getSession(token);
+
+  if (!session || !session.병원ID) {
+    throw new Error('세션이 만료되었습니다. 다시 로그인해주세요.');
+  }
+
+  return session;
+}
+
+
+// =====================================================================
+// 날짜 → 'yyyy-MM-dd' 문자열 (내부 헬퍼)
+// 시트에서 Date 객체로 돌아오는 값과 문자열 입력을 모두 통일
+// =====================================================================
+
+function PROC_날짜문자열_(value) {
+
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(
+      value,
+      Session.getScriptTimeZone(),
+      'yyyy-MM-dd'
+    );
+  }
+
+  var s = String(value).trim();
+
+  // '2026. 8. 19' 형태 방어
+  var m = s.match(/^(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+
+  if (m) {
+    return m[1] + '-' +
+      ('0' + m[2]).slice(-2) + '-' +
+      ('0' + m[3]).slice(-2);
+  }
+
+  return s;
+}
+
+
+// =====================================================================
+// 금액 정규화 (내부 헬퍼)
+// '450,000' / '450000' / 450000 → 450000. 빈값은 0.
+// =====================================================================
+
+function PROC_금액정규화_(value) {
+
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+
+  var n = Number(String(value).replace(/,/g, '').trim());
+
+  if (isNaN(n) || n < 0) {
+    throw new Error('시술금액이 올바르지 않습니다: ' + value);
+  }
+
+  return n;
+}
+
+
+// =====================================================================
+// 패키지여부 정규화 (내부 헬퍼)
+// 'Y' 또는 '' 두 값만 저장한다.
+// Y/y/O/TRUE/true/예/패키지/1 → 'Y', 그 외 → ''
+// =====================================================================
+
+function PROC_패키지정규화_(value) {
+
+  if (value === true) {
+    return 'Y';
+  }
+
+  var s = String(value === null || value === undefined ? '' : value)
+    .trim()
+    .toUpperCase();
+
+  if (s === 'Y' || s === 'O' || s === 'TRUE' ||
+      s === '예' || s === '패키지' || s === '1') {
+    return 'Y';
+  }
+
+  return '';
+}
+
+
+// =====================================================================
+// 시술ID 채번 (내부 헬퍼)
+// S + 6자리, 전 병원 통합 채번. 개수만큼 연속 발급.
+// =====================================================================
+
+function PROC_새ID목록_(개수) {
+
+  var rows = DB_getAll('시술');
+  var max = 0;
+
+  rows.forEach(function(row) {
+    var id = String(row['시술ID'] || '');
+    if (id.charAt(0) === 'S') {
+      var n = parseInt(id.substring(1), 10);
+      if (!isNaN(n) && n > max) {
+        max = n;
+      }
+    }
+  });
+
+  var list = [];
+
+  for (var i = 1; i <= 개수; i++) {
+    list.push('S' + ('000000' + (max + i)).slice(-6));
+  }
+
+  return list;
+}
+
+
+// =====================================================================
+// 등록묶음ID 채번 (내부 헬퍼)
+// B + yyyyMMdd + 3자리. 순번은 해당 시술일 기준 최대값 + 1.
+// =====================================================================
+
+function PROC_새묶음ID_(시술일) {
+
+  var 날짜 = PROC_날짜문자열_(시술일).replace(/-/g, '');
+
+  if (날짜.length !== 8) {
+    throw new Error('시술일이 올바르지 않습니다: ' + 시술일);
+  }
+
+  var prefix = 'B' + 날짜;
+  var rows = DB_getAll('시술');
+  var max = 0;
+
+  rows.forEach(function(row) {
+    var id = String(row['등록묶음ID'] || '');
+    if (id.indexOf(prefix) === 0) {
+      var n = parseInt(id.substring(prefix.length), 10);
+      if (!isNaN(n) && n > max) {
+        max = n;
+      }
+    }
+  });
+
+  return prefix + ('000' + (max + 1)).slice(-3);
+}
+
+
+// =====================================================================
+// 시술 요약 (시술 메인 상단 카드)
+//
+// 반환:
+// {
+//   금일건수, 당월건수, 당월매출,
+//   당월구분별: { 일반: n, 회원권: n, 체험단무료: n, 다회차: n },
+//   원가연결: false   ← FIFO 재고 연동 전. 프론트는 원가 지표를
+//                       '미연결'로 표시하고, true가 되면 자동 전환한다.
+// }
+// 취소 건은 모든 집계에서 제외한다.
+// =====================================================================
+
+function PROC_getSummary(token) {
+
+  var session = PROC_세션확인_(token);
+
+  var 오늘 = PROC_날짜문자열_(new Date());
+  var 당월 = 오늘.substring(0, 7);
+
+  var rows = DB_findWhere('시술', { 병원ID: session.병원ID });
+
+  var 결과 = {
+    금일건수: 0,
+    당월건수: 0,
+    당월매출: 0,
+    당월구분별: { 일반: 0, 회원권: 0, 체험단무료: 0, 다회차: 0 },
+    당월구분별매출: { 일반: 0, 회원권: 0, 체험단무료: 0, 다회차: 0 },
+    원가연결: false
+  };
+
+  rows.forEach(function(row) {
+
+    if (String(row['상태']) === PROC_상태_취소) {
+      return;
+    }
+
+    var 일자 = PROC_날짜문자열_(row['시술일']);
+
+    if (일자 === 오늘) {
+      결과.금일건수++;
+    }
+
+    if (일자.substring(0, 7) === 당월) {
+
+      var 금액 = Number(row['시술금액']) || 0;
+
+      결과.당월건수++;
+      결과.당월매출 += 금액;
+
+      var 구분 = String(row['시술구분'] || '');
+      if (결과.당월구분별[구분] !== undefined) {
+        결과.당월구분별[구분]++;
+        결과.당월구분별매출[구분] += 금액;
+      }
+    }
+  });
+
+  return 결과;
+}
+
+
+// =====================================================================
+// 시술 목록 조회
+//
+// 조건 (모두 선택 사항):
+// {
+//   시작일: 'yyyy-MM-dd',
+//   종료일: 'yyyy-MM-dd',
+//   환자번호: '부분일치',
+//   환자명: '부분일치',
+//   시술구분: '일반' | '회원권' | '체험단무료' | '다회차' | '' (전체),
+//   취소포함: true | false (기본 false),
+//   최대건수: 숫자 (기본 200. 조건 없이 최근 조회 시 20 권장)
+// }
+// =====================================================================
+
+function PROC_getList(token, 조건) {
+
+  var session = PROC_세션확인_(token);
+
+  조건 = 조건 || {};
+
+  var 시작일 = PROC_날짜문자열_(조건.시작일 || '');
+  var 종료일 = PROC_날짜문자열_(조건.종료일 || '');
+  var 환자번호 = String(조건.환자번호 || '').trim();
+  var 환자명 = String(조건.환자명 || '').trim();
+  var 시술구분 = String(조건.시술구분 || '').trim();
+  var 취소포함 = 조건.취소포함 === true;
+  var 최대건수 = Number(조건.최대건수) > 0 ? Number(조건.최대건수) : 200;
+
+  var rows = DB_findWhere('시술', { 병원ID: session.병원ID });
+
+  var 필터 = rows.filter(function(row) {
+
+    if (!취소포함 && String(row['상태']) === PROC_상태_취소) {
+      return false;
+    }
+
+    var 일자 = PROC_날짜문자열_(row['시술일']);
+
+    if (시작일 && 일자 < 시작일) return false;
+    if (종료일 && 일자 > 종료일) return false;
+
+    if (환자번호 &&
+        String(row['환자번호']).indexOf(환자번호) === -1) {
+      return false;
+    }
+
+    if (환자명 &&
+        String(row['환자명']).indexOf(환자명) === -1) {
+      return false;
+    }
+
+    if (시술구분 &&
+        String(row['시술구분']) !== 시술구분) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // 시술일 내림차순 → 시술ID 내림차순
+  필터.sort(function(a, b) {
+
+    var da = PROC_날짜문자열_(a['시술일']);
+    var db = PROC_날짜문자열_(b['시술일']);
+
+    if (da !== db) {
+      return da < db ? 1 : -1;
+    }
+
+    return String(a['시술ID']) < String(b['시술ID']) ? 1 : -1;
+  });
+
+  return 필터
+    .slice(0, 최대건수)
+    .map(function(row) {
+      return {
+        시술ID: row['시술ID'],
+        등록묶음ID: row['등록묶음ID'],
+        환자번호: String(row['환자번호']),
+        환자명: row['환자명'],
+        시술일: PROC_날짜문자열_(row['시술일']),
+        시술구분: row['시술구분'],
+        시술명: row['시술명'],
+        용량: row['용량'] === undefined ? '' : String(row['용량']),
+        단위: row['단위'] === undefined ? '' : String(row['단위']),
+        시술금액: Number(row['시술금액']) || 0,
+        담당원장: row['담당원장'],
+        담당실장: row['담당실장'],
+        비고: row['비고'],
+        패키지여부: String(row['패키지여부'] || ''),
+        상태: row['상태']
+      };
+    });
+}
+
+
+// =====================================================================
+// 일괄 저장 (시술 등록)
+//
+// 공통: { 시술일: 'yyyy-MM-dd', 시술구분: '일반'|'회원권'|'체험단무료'|'다회차' }
+// 행목록: [
+//   { 환자번호, 환자명, 시술명, 용량, 단위, 시술금액,
+//     담당원장, 담당실장, 비고, 패키지여부 }, ...
+// ]
+//
+// - 등록묶음ID 1개 발급, 환자별 개별 레코드로 저장
+// - DB_insertMany 1회 호출 (배치)
+// - 반환: { 등록묶음ID, 저장건수 }
+// =====================================================================
+
+function PROC_saveBatch(token, 공통, 행목록) {
+
+  var session = PROC_세션확인_(token);
+
+  // ---------------- 공통 항목 검증 ----------------
+
+  공통 = 공통 || {};
+
+  var 시술일 = PROC_날짜문자열_(공통.시술일);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(시술일)) {
+    throw new Error('시술일을 입력해주세요.');
+  }
+
+  var 시술구분 = String(공통.시술구분 || '').trim();
+
+  if (PROC_시술구분목록.indexOf(시술구분) === -1) {
+    throw new Error('시술구분이 올바르지 않습니다: ' + 시술구분);
+  }
+
+  // ---------------- 기준정보 허용 목록 (프론트를 신뢰하지 않는다) ----------------
+
+  var 허용_시술명 = BASE_값목록_(session.병원ID, '시술명');
+  var 허용_실장 = BASE_값목록_(session.병원ID, '담당실장');
+  var 허용_원장 = BASE_값목록_(session.병원ID, '담당원장');
+
+  // ---------------- 행 검증 ----------------
+
+  if (!Array.isArray(행목록) || 행목록.length === 0) {
+    throw new Error('저장할 시술 내역이 없습니다.');
+  }
+
+  var 유효행 = [];
+  var 오류들 = [];
+
+  행목록.forEach(function(행, i) {
+
+    var 환자번호 = String(행.환자번호 || '').trim();
+    var 시술명 = String(행.시술명 || '').trim();
+
+    // 완전히 빈 행은 무시
+    if (환자번호 === '' && 시술명 === '') {
+      return;
+    }
+
+    if (환자번호 === '' || 시술명 === '') {
+      오류들.push((i + 1) + '번 행: 환자번호와 시술명은 모두 입력해야 합니다.');
+      return;
+    }
+
+    if (허용_시술명.indexOf(시술명) === -1) {
+      오류들.push((i + 1) + '번 행: 시술명 "' + 시술명 +
+        '"은(는) 기준정보 목록에 없습니다. 관리 > 거래처/기본정보에서 먼저 등록해주세요.');
+      return;
+    }
+
+    var 실장 = String(행.담당실장 || '').trim();
+    var 원장 = String(행.담당원장 || '').trim();
+
+    if (실장 !== '' && 허용_실장.indexOf(실장) === -1) {
+      오류들.push((i + 1) + '번 행: 담당실장 "' + 실장 + '"은(는) 기준정보 목록에 없습니다.');
+      return;
+    }
+
+    if (원장 !== '' && 허용_원장.indexOf(원장) === -1) {
+      오류들.push((i + 1) + '번 행: 담당원장 "' + 원장 + '"은(는) 기준정보 목록에 없습니다.');
+      return;
+    }
+
+    var 금액;
+
+    try {
+      금액 = PROC_금액정규화_(행.시술금액);
+    } catch (e) {
+      오류들.push((i + 1) + '번 행: ' + e.message);
+      return;
+    }
+
+    유효행.push({
+      환자번호: 환자번호,
+      환자명: String(행.환자명 || '').trim(),
+      시술명: 시술명,
+      용량: String(행.용량 === undefined || 행.용량 === null ? '' : 행.용량).trim(),
+      단위: String(행.단위 || '').trim(),
+      시술금액: 금액,
+      담당원장: String(행.담당원장 || '').trim(),
+      담당실장: String(행.담당실장 || '').trim(),
+      비고: String(행.비고 || '').trim(),
+      패키지여부: PROC_패키지정규화_(행.패키지여부)
+    });
+  });
+
+  if (오류들.length > 0) {
+    throw new Error(오류들.join('\n'));
+  }
+
+  if (유효행.length === 0) {
+    throw new Error('저장할 시술 내역이 없습니다.');
+  }
+
+  // ---------------- 채번 + 배치 저장 ----------------
+
+  var 묶음ID = PROC_새묶음ID_(시술일);
+  var ID목록 = PROC_새ID목록_(유효행.length);
+  var 지금 = new Date();
+
+  var 저장목록 = 유효행.map(function(행, i) {
+    return {
+      시술ID: ID목록[i],
+      등록묶음ID: 묶음ID,
+      병원ID: session.병원ID,
+      환자번호: 행.환자번호,
+      환자명: 행.환자명,
+      시술일: 시술일,
+      시술구분: 시술구분,
+      시술명: 행.시술명,
+      용량: 행.용량,
+      단위: 행.단위,
+      시술금액: 행.시술금액,
+      담당원장: 행.담당원장,
+      담당실장: 행.담당실장,
+      비고: 행.비고,
+      패키지여부: 행.패키지여부,
+      상태: PROC_상태_완료,
+      등록일시: 지금,
+      수정일시: 지금
+    };
+  });
+
+  DB_insertMany('시술', 저장목록);
+
+  return {
+    등록묶음ID: 묶음ID,
+    저장건수: 저장목록.length
+  };
+}
+
+
+// =====================================================================
+// 단건 수정
+//
+// data: { 시술ID(필수), 환자번호, 환자명, 시술일, 시술명, 용량, 단위,
+//         시술금액, 담당원장, 담당실장, 비고, 패키지여부 }
+// - 병원ID / 시술구분 / 등록묶음ID / 상태는 이 함수로 변경 불가
+// - 소속 병원 검증: 다른 병원 시술은 수정 불가
+// =====================================================================
+
+function PROC_update(token, data) {
+
+  var session = PROC_세션확인_(token);
+
+  data = data || {};
+
+  var 시술ID = String(data.시술ID || '').trim();
+
+  if (!시술ID) {
+    throw new Error('시술ID가 없습니다.');
+  }
+
+  var 기존 = DB_findById('시술', '시술ID', 시술ID);
+
+  if (!기존) {
+    throw new Error('시술을 찾을 수 없습니다: ' + 시술ID);
+  }
+
+  if (String(기존['병원ID']) !== String(session.병원ID)) {
+    throw new Error('다른 병원의 시술은 수정할 수 없습니다.');
+  }
+
+  var 환자번호 = String(data.환자번호 || '').trim();
+  var 시술명 = String(data.시술명 || '').trim();
+  var 시술일 = PROC_날짜문자열_(data.시술일);
+
+  if (!환자번호 || !시술명) {
+    throw new Error('환자번호와 시술명은 모두 입력해야 합니다.');
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(시술일)) {
+    throw new Error('시술일이 올바르지 않습니다.');
+  }
+
+  // 기준정보 허용 목록 검증 (프론트를 신뢰하지 않는다)
+  if (BASE_값목록_(session.병원ID, '시술명').indexOf(시술명) === -1) {
+    throw new Error('시술명 "' + 시술명 + '"은(는) 기준정보 목록에 없습니다.');
+  }
+
+  var 수정실장 = String(data.담당실장 || '').trim();
+  var 수정원장 = String(data.담당원장 || '').trim();
+
+  if (수정실장 !== '' &&
+      BASE_값목록_(session.병원ID, '담당실장').indexOf(수정실장) === -1) {
+    throw new Error('담당실장 "' + 수정실장 + '"은(는) 기준정보 목록에 없습니다.');
+  }
+
+  if (수정원장 !== '' &&
+      BASE_값목록_(session.병원ID, '담당원장').indexOf(수정원장) === -1) {
+    throw new Error('담당원장 "' + 수정원장 + '"은(는) 기준정보 목록에 없습니다.');
+  }
+
+  DB_updateById('시술', '시술ID', 시술ID, {
+    환자번호: 환자번호,
+    환자명: String(data.환자명 || '').trim(),
+    시술일: 시술일,
+    시술명: 시술명,
+    용량: String(data.용량 === undefined || data.용량 === null ? '' : data.용량).trim(),
+    단위: String(data.단위 || '').trim(),
+    시술금액: PROC_금액정규화_(data.시술금액),
+    담당원장: String(data.담당원장 || '').trim(),
+    담당실장: String(data.담당실장 || '').trim(),
+    비고: String(data.비고 || '').trim(),
+    패키지여부: PROC_패키지정규화_(data.패키지여부),
+    수정일시: new Date()
+  });
+
+  return { success: true };
+}
+
+
+// =====================================================================
+// 취소 / 취소 해제 (논리 삭제 — 물리 삭제 없음)
+// =====================================================================
+
+function PROC_취소(token, 시술ID, 취소여부) {
+
+  var session = PROC_세션확인_(token);
+
+  시술ID = String(시술ID || '').trim();
+
+  if (!시술ID) {
+    throw new Error('시술ID가 없습니다.');
+  }
+
+  var 기존 = DB_findById('시술', '시술ID', 시술ID);
+
+  if (!기존) {
+    throw new Error('시술을 찾을 수 없습니다: ' + 시술ID);
+  }
+
+  if (String(기존['병원ID']) !== String(session.병원ID)) {
+    throw new Error('다른 병원의 시술은 변경할 수 없습니다.');
+  }
+
+  var 새상태 = 취소여부 === false
+    ? PROC_상태_완료
+    : PROC_상태_취소;
+
+  DB_updateById('시술', '시술ID', 시술ID, {
+    상태: 새상태,
+    수정일시: new Date()
+  });
+
+  return { success: true, 상태: 새상태 };
+}
+
+
+// =====================================================================
+// 05_시술 시트 재구성 (18열 마이그레이션)
+//
+// 15열 → 18열 (시술명 뒤에 용량/단위, 비고 뒤에 패키지여부 삽입)
+// - 데이터 보존형: 기존 헤더명 기준으로 값을 이관
+//   새 컬럼 기본값: 용량 '' / 단위 '' / 패키지여부 '' / 시술금액 0
+// - 이미 새 구조면 아무 작업도 하지 않는다 (반복 실행 안전)
+// - 14열(시술금액 없음) 구버전에서 실행해도 동일하게 동작한다
+// - 최초 1회 수동 실행
+// =====================================================================
+
+function PROC_시트재구성() {
+
+  var ss = SpreadsheetApp.openById(DB_SPREADSHEET_ID);
+  var sheet = ss.getSheetByName('05_시술');
+
+  if (!sheet) {
+    sheet = ss.insertSheet('05_시술');
+    PROC_헤더쓰기_(sheet, PROC_새헤더);
+    Logger.log('05_시술 신규 생성: 헤더만 기록');
+    return;
+  }
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+
+  if (lastRow < 1 || lastCol < 1) {
+    PROC_헤더쓰기_(sheet, PROC_새헤더);
+    Logger.log('05_시술 빈 시트: 헤더만 기록');
+    return;
+  }
+
+  var 기존헤더 = sheet
+    .getRange(1, 1, 1, lastCol)
+    .getValues()[0]
+    .map(function(v) { return String(v); });
+
+  if (기존헤더.join('|') === PROC_새헤더.join('|')) {
+    Logger.log('05_시술 이미 새 구조(18열). 변경 없음.');
+    return;
+  }
+
+  var 위치 = {};
+
+  PROC_새헤더.forEach(function(h) {
+    위치[h] = 기존헤더.indexOf(h);
+  });
+
+  var 새행 = [];
+
+  if (lastRow >= 2) {
+
+    var 데이터 = sheet
+      .getRange(2, 1, lastRow - 1, lastCol)
+      .getValues();
+
+    데이터.forEach(function(row) {
+
+      var 가져오기 = function(field, 기본) {
+        var c = 위치[field];
+        return c >= 0 ? row[c] : (기본 === undefined ? '' : 기본);
+      };
+
+      var sid = String(가져오기('시술ID'));
+      var 환자 = String(가져오기('환자번호'));
+
+      if (sid === '' && 환자 === '') {
+        return;
+      }
+
+      새행.push(PROC_새헤더.map(function(h) {
+        if (h === '시술금액') {
+          var v = 가져오기('시술금액', '');
+          return v === '' ? 0 : v;
+        }
+        if (h === '담당실장' && 위치['담당실장'] < 0) {
+          // 구버전 컬럼명 '담당자'에서 데이터 이관
+          var c = 기존헤더.indexOf('담당자');
+          return c >= 0 ? row[c] : '';
+        }
+        return 가져오기(h);
+      }));
+    });
+  }
+
+  sheet.clear();
+
+  PROC_헤더쓰기_(sheet, PROC_새헤더);
+
+  if (새행.length > 0) {
+    sheet
+      .getRange(2, 1, 새행.length, PROC_새헤더.length)
+      .setValues(새행);
+  }
+
+  SpreadsheetApp.flush();
+
+  Logger.log('05_시술 재구성 완료: ' + 새행.length +
+    '건 이관, 18열(용량/단위/패키지여부 포함)');
+}
+
+
+function PROC_헤더쓰기_(sheet, 헤더) {
+
+  sheet
+    .getRange(1, 1, 1, 헤더.length)
+    .setValues([헤더]);
+
+  sheet.setFrozenRows(1);
+
+  sheet
+    .getRange(1, 1, 1, 헤더.length)
+    .setFontWeight('bold');
+
+  sheet.autoResizeColumns(1, 헤더.length);
+}
+
+
+// =====================================================================
+// 통합 테스트 (편집기에서 수동 실행, Logger 확인)
+//
+// 임시 세션(H003) 생성 → 일괄저장(2건, 용량/단위/패키지여부 포함)
+// → 조회 → 수정 → 재조회 → 취소 → 요약
+// → 테스트 행 정리(시트에서 직접 삭제)
+//
+// 테스트 데이터는 마지막에 직접 삭제하므로 반복 실행해도 찌꺼기가
+// 남지 않는다. (아직 06 등 참조 데이터가 없으므로 안전)
+// =====================================================================
+
+function test_PROC_전체흐름() {
+
+  Logger.log('=== 시술 통합 테스트 시작 ===');
+
+  // 1) 임시 세션 (H003)
+  var token = AUTH_createSession({
+    사용자ID: 'U000003',
+    병원ID: 'H003',
+    아이디: 'joon',
+    이름: '원인준',
+    권한: 'ADMIN'
+  });
+
+  Logger.log('1. 임시 세션 생성 (H003)');
+
+  var 오늘 = PROC_날짜문자열_(new Date());
+  var 생성ID들 = [];
+
+  try {
+
+    // 2) 일괄 저장 (기준정보 목록에 있는 값 사용)
+    var 결과 = PROC_saveBatch(
+      token,
+      { 시술일: 오늘, 시술구분: '일반' },
+      [
+        {
+          환자번호: 'TEST-001',
+          환자명: '테스트환자A',
+          시술명: '리쥬란 힐러',
+          용량: '2',
+          단위: 'cc',
+          시술금액: '450,000',
+          담당원장: '손현규',
+          담당실장: '김지영',
+          비고: '통합테스트',
+          패키지여부: ''
+        },
+        {
+          환자번호: 'TEST-002',
+          환자명: '테스트환자B',
+          시술명: '피코 토닝',
+          용량: '1',
+          단위: '회',
+          시술금액: 99000,
+          담당원장: '손현규',
+          담당실장: '김지영',
+          비고: '통합테스트 (패키지)',
+          패키지여부: 'Y'
+        }
+      ]
+    );
+
+    Logger.log('2. 일괄 저장: ' + 결과.저장건수 + '건, 묶음ID ' + 결과.등록묶음ID);
+
+    // 2-1) 기준정보에 없는 시술명 차단 확인
+    var 차단됨 = false;
+    try {
+      PROC_saveBatch(token, { 시술일: 오늘, 시술구분: '일반' }, [
+        { 환자번호: 'TEST-003', 시술명: '목록에없는시술', 시술금액: 0 }
+      ]);
+    } catch (e) {
+      차단됨 = true;
+    }
+    Logger.log('2-1. 목록 외 시술명 차단: ' + (차단됨 ? '정상' : '실패'));
+
+    // 3) 조회
+    var 목록 = PROC_getList(token, { 환자번호: 'TEST-' });
+
+    목록.forEach(function(r) { 생성ID들.push(r.시술ID); });
+
+    var 패키지확인 = 목록.filter(function(r) {
+      return r.환자번호 === 'TEST-002' && r.패키지여부 === 'Y';
+    }).length;
+
+    Logger.log('3. 조회: ' + 목록.length + '건 (2건이어야 정상), ' +
+      '패키지여부 저장 ' + (패키지확인 === 1 ? '정상' : '실패'));
+
+    // 4) 수정
+    var 대상 = 목록[0];
+
+    PROC_update(token, {
+      시술ID: 대상.시술ID,
+      환자번호: 대상.환자번호,
+      환자명: 대상.환자명,
+      시술일: 대상.시술일,
+      시술명: '리쥬란 아이',
+      용량: '3',
+      단위: 'cc',
+      시술금액: 500000,
+      담당원장: 대상.담당원장,
+      담당실장: 대상.담당실장,
+      비고: 대상.비고,
+      패키지여부: 대상.패키지여부
+    });
+
+    Logger.log('4. 수정: ' + 대상.시술ID + ' 시술명(리쥬란 아이)·용량·금액 변경');
+
+    // 5) 재조회
+    var 재조회 = PROC_getList(token, { 환자번호: 'TEST-' });
+
+    var 수정확인 = 재조회.filter(function(r) {
+      return r.시술ID === 대상.시술ID &&
+        r.시술명 === '리쥬란 아이' &&
+        r.용량 === '3' &&
+        r.시술금액 === 500000;
+    }).length;
+
+    Logger.log('5. 재조회 반영 확인: ' + (수정확인 === 1 ? '정상' : '실패'));
+
+    // 6) 취소
+    PROC_취소(token, 대상.시술ID);
+
+    var 취소후 = PROC_getList(token, { 환자번호: 'TEST-' });
+    var 취소포함 = PROC_getList(token, { 환자번호: 'TEST-', 취소포함: true });
+
+    Logger.log(
+      '6. 취소: 기본 조회 ' + 취소후.length + '건(1이어야 정상), ' +
+      '취소 포함 ' + 취소포함.length + '건(2여야 정상)'
+    );
+
+    // 7) 요약
+    var 요약 = PROC_getSummary(token);
+
+    Logger.log(
+      '7. 요약: 금일 ' + 요약.금일건수 + '건, 당월 ' + 요약.당월건수 +
+      '건, 당월매출 ' + 요약.당월매출 + ', 원가연결 ' + 요약.원가연결
+    );
+
+  } finally {
+
+    // 8) 테스트 행 정리 (시트에서 직접 삭제)
+    var sheet = DB_getSheet('시술');
+    var lastRow = sheet.getLastRow();
+
+    if (lastRow >= 2 && 생성ID들.length > 0) {
+
+      var ids = sheet
+        .getRange(2, 1, lastRow - 1, 1)
+        .getValues();
+
+      for (var r = ids.length - 1; r >= 0; r--) {
+        if (생성ID들.indexOf(String(ids[r][0])) !== -1) {
+          sheet.deleteRow(r + 2);
+        }
+      }
+    }
+
+    AUTH_logout(token);
+
+    Logger.log('8. 테스트 행 ' + 생성ID들.length + '건 정리, 세션 종료');
+  }
+
+  Logger.log('=== 시술 통합 테스트 종료 ===');
+}

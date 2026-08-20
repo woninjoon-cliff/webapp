@@ -1,0 +1,174 @@
+<style>
+/* =====================================================================
+   style_기준정보.html — 기준정보 관리 (관리 > 거래처/기본정보)
+   (공용 .버튼 / .버튼주요 / .버튼보조 는 style_품목.html 에 정의됨)
+   ===================================================================== */
+
+
+.기준정보카드 {
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.기준정보카드 .카드제목 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #40385f;
+  margin-bottom: 4px;
+}
+
+.기준정보카드 .카드설명 {
+  font-size: 12px;
+  color: #8b849d;
+  margin-bottom: 14px;
+  line-height: 1.7;
+}
+
+
+/* ================= 구분 탭 ================= */
+
+.기준정보탭 {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.기준정보탭 button {
+  border: 1px solid #eeeaf5;
+  background: #fff;
+  color: #8b849d;
+  border-radius: 7px;
+  padding: 7px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.기준정보탭 button.활성 {
+  background: #8064d8;
+  border-color: #8064d8;
+  color: #fff;
+}
+
+
+/* ================= 추가 줄 ================= */
+
+.기준정보추가줄 {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.기준정보추가줄 .필드 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.기준정보추가줄 label {
+  font-size: 11px;
+  color: #8b849d;
+}
+
+.기준정보추가줄 input {
+  border: 1px solid #eeeaf5;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #40385f;
+  width: 220px;
+}
+
+.기준정보추가줄 input:focus {
+  outline: 1px solid #8064d8;
+}
+
+
+/* ================= 표 ================= */
+
+.기준정보표영역 {
+  overflow-x: auto;
+}
+
+.기준정보표 {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.기준정보표 thead th {
+  background: #f6f2fe;
+  padding: 9px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #40385f;
+  border-bottom: 1px solid #ece6f7;
+  white-space: nowrap;
+}
+
+.기준정보표 tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1edf9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #40385f;
+}
+
+.기준정보표 tbody tr:hover {
+  background: #faf8fe;
+}
+
+.기준정보표 tbody td input {
+  border: 1px solid #8064d8;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: #40385f;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.기준정보링크 {
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.기준정보링크 + .기준정보링크 {
+  margin-left: 10px;
+}
+
+.기준정보중지텍스트 {
+  color: #d92d20;
+  font-weight: 600;
+}
+
+.기준정보안내 {
+  padding: 24px 0;
+  text-align: center;
+  color: #8b849d;
+  font-size: 13px;
+}
+
+.기준정보상태 {
+  margin-top: 10px;
+  font-size: 13px;
+  display: none;
+}
+
+.기준정보상태.성공 {
+  display: block;
+  color: #40385f;
+}
+
+.기준정보상태.오류 {
+  display: block;
+  color: #d92d20;
+  white-space: pre-line;
+}
+</style>

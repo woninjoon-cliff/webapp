@@ -1,0 +1,327 @@
+<script>
+/* =====================================================================
+   script_관리_기준정보.html — 기준정보 관리 프론트 (구분 고정형)
+   대상 페이지: mgmt_procedure(시술 관리)   → 구분 '시술명'
+              mgmt_manager(실장 관리)     → 구분 '담당실장'
+              mgmt_doctor(원장 관리)      → 구분 '담당원장'
+   서버: Base.gs (BASE_*)  /  14_기준정보
+   - 시술 등록 드롭다운 목록 관리. 여기에 없는 값은 시술 등록이 차단된다
+   - 물리 삭제 없음: 사용중지(논리 삭제) / 사용재개만
+   ===================================================================== */
+
+
+/* ================================================================
+   전역 상태
+   ================================================================ */
+
+let 기준정보_전체목록 = [];
+let 기준정보_현재구분 = '시술명';
+let 기준정보_편집중ID = null;
+
+const 기준정보_구분설정 = {
+  시술명: {
+    카드제목: '시술명 목록',
+    안내: '시술 등록 화면의 시술명 드롭다운 목록입니다. 여기에 없는 시술명은 등록이 차단됩니다. 비고의 분류·종류·단위는 추후 원가 기준에서 활용됩니다.',
+    입력예시: '예: 리쥬란 힐러'
+  },
+  담당실장: {
+    카드제목: '담당실장 목록',
+    안내: '시술 등록 화면의 담당실장 드롭다운 목록입니다. 퇴사 등으로 빠지면 사용중지하세요. 과거 시술 기록은 유지됩니다.',
+    입력예시: '예: 김지영'
+  },
+  담당원장: {
+    카드제목: '담당원장 목록',
+    안내: '시술 등록 화면의 담당원장 드롭다운 목록입니다. 퇴사 등으로 빠지면 사용중지하세요. 과거 시술 기록은 유지됩니다.',
+    입력예시: '예: 손현규'
+  }
+};
+
+
+function 기준정보_escape(value) {
+
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+/* ================================================================
+   화면 (구분 고정 — 탭 없음)
+   ================================================================ */
+
+function 기준정보_화면(구분) {
+
+  const 설정 = 기준정보_구분설정[구분];
+  const 비고표시 = 구분 === '시술명';
+
+  return `
+    <div class="기준정보카드">
+
+      <div class="카드제목">` + 기준정보_escape(설정.카드제목) + `</div>
+      <div class="카드설명">` + 기준정보_escape(설정.안내) + ` 삭제는 없으며 사용중지하면 드롭다운에서만 빠집니다.</div>
+
+      <div class="기준정보추가줄">
+        <div class="필드">
+          <label>새 항목</label>
+          <input type="text" id="기준정보_새값" placeholder="` + 기준정보_escape(설정.입력예시) + `">
+        </div>
+        <button class="버튼 버튼주요" onclick="기준정보_추가()">추가</button>
+        <button class="버튼 버튼보조" onclick="기준정보_불러오기()">새로고침</button>
+        <div class="필드" style="margin-left:auto;">
+          <label>&nbsp;</label>
+          <span style="font-size:12px; color:#8b849d;" id="기준정보_건수"></span>
+        </div>
+      </div>
+
+      <div class="기준정보표영역">
+        <table class="기준정보표">
+          <colgroup>
+            ` + (비고표시
+              ? '<col style="width:90px"><col><col style="width:230px"><col style="width:80px"><col style="width:150px">'
+              : '<col style="width:90px"><col><col style="width:80px"><col style="width:150px">') + `
+          </colgroup>
+          <thead>
+            <tr>
+              <th>기준ID</th><th>값</th>` + (비고표시 ? '<th>비고</th>' : '') + `<th>사용여부</th><th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="기준정보표본문">
+            <tr><td colspan="` + (비고표시 ? 5 : 4) + `"><div class="기준정보안내">불러오는 중...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="기준정보상태" id="기준정보_상태"></div>
+
+    </div>
+  `;
+}
+
+
+/* ================================================================
+   초기화 (페이지렌더링에서 구분을 넘겨 호출)
+   ================================================================ */
+
+function 기준정보_초기화(구분) {
+
+  기준정보_현재구분 = 구분;
+  기준정보_편집중ID = null;
+  기준정보_불러오기();
+}
+
+
+/* ================================================================
+   조회
+   ================================================================ */
+
+function 기준정보_불러오기() {
+
+  기준정보_편집중ID = null;
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      기준정보_전체목록 = 목록 || [];
+      기준정보_표렌더();
+    })
+
+    .withFailureHandler(function(error) {
+
+      const tbody = document.getElementById('기준정보표본문');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="5"><div class="기준정보안내">조회 실패</div></td></tr>';
+      }
+      alert('기준정보를 불러오지 못했습니다.\n' + (error && error.message ? error.message : error));
+    })
+
+    .BASE_getList(현재세션.token, { 구분: 기준정보_현재구분, 미사용포함: true });
+}
+
+
+/* ================================================================
+   표 렌더
+   ================================================================ */
+
+function 기준정보_표렌더() {
+
+  const tbody = document.getElementById('기준정보표본문');
+
+  if (!tbody) {
+    return;
+  }
+
+  const 비고표시 = 기준정보_현재구분 === '시술명';
+  const 열수 = 비고표시 ? 5 : 4;
+
+  const 목록 = 기준정보_전체목록.filter(function(r) {
+    return r.구분 === 기준정보_현재구분;
+  });
+
+  const 건수 = document.getElementById('기준정보_건수');
+  if (건수) {
+    const 사용중 = 목록.filter(function(r) { return r.사용여부; }).length;
+    건수.textContent = '사용중 ' + 사용중 + '건 / 전체 ' + 목록.length + '건';
+  }
+
+  if (목록.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="' + 열수 + '"><div class="기준정보안내">등록된 항목이 없습니다.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = 목록.map(function(r) {
+
+    const 편집중 = r.기준ID === 기준정보_편집중ID;
+
+    const 값칸 = 편집중
+      ? '<input type="text" id="기준정보편집_' + 기준정보_escape(r.기준ID) + '" value="' + 기준정보_escape(r.값) + '">'
+      : 기준정보_escape(r.값);
+
+    const 관리칸 = 편집중
+      ? '<span class="기준정보링크" onclick="기준정보_이름변경저장(\'' + 기준정보_escape(r.기준ID) + '\')">저장</span>' +
+        '<span class="기준정보링크" onclick="기준정보_편집취소()">취소</span>'
+      : '<span class="기준정보링크" onclick="기준정보_편집시작(\'' + 기준정보_escape(r.기준ID) + '\')">이름변경</span>' +
+        (r.사용여부
+          ? '<span class="기준정보링크" onclick="기준정보_사용여부(\'' + 기준정보_escape(r.기준ID) + '\', false)">사용중지</span>'
+          : '<span class="기준정보링크" onclick="기준정보_사용여부(\'' + 기준정보_escape(r.기준ID) + '\', true)">사용재개</span>');
+
+    return '<tr>' +
+      '<td>' + 기준정보_escape(r.기준ID) + '</td>' +
+      '<td title="' + 기준정보_escape(r.값) + '">' + 값칸 + '</td>' +
+      (비고표시 ? '<td title="' + 기준정보_escape(r.비고) + '">' + 기준정보_escape(r.비고) + '</td>' : '') +
+      '<td>' + (r.사용여부 ? '사용' : '<span class="기준정보중지텍스트">중지</span>') + '</td>' +
+      '<td>' + 관리칸 + '</td>' +
+    '</tr>';
+  }).join('');
+
+  // 편집칸 포커스
+  if (기준정보_편집중ID) {
+    const input = document.getElementById('기준정보편집_' + 기준정보_편집중ID);
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+}
+
+
+function 기준정보_상태표시(문구, 오류) {
+
+  const el = document.getElementById('기준정보_상태');
+
+  if (!el) {
+    return;
+  }
+
+  el.className = '기준정보상태 ' + (오류 ? '오류' : '성공');
+  el.textContent = 문구;
+}
+
+
+/* ================================================================
+   추가
+   ================================================================ */
+
+function 기준정보_추가() {
+
+  const input = document.getElementById('기준정보_새값');
+  const 값 = input.value.trim();
+
+  if (!값) {
+    기준정보_상태표시('추가할 값을 입력해주세요.', true);
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function(결과) {
+
+      input.value = '';
+      기준정보_상태표시('"' + 결과.값 + '" 추가됨. 시술 등록 드롭다운에 바로 반영됩니다.');
+      기준정보_불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      기준정보_상태표시('추가 실패: ' + (error && error.message ? error.message : error), true);
+    })
+
+    .BASE_add(현재세션.token, { 구분: 기준정보_현재구분, 값: 값 });
+}
+
+
+/* ================================================================
+   이름변경 (인라인 편집)
+   ================================================================ */
+
+function 기준정보_편집시작(기준ID) {
+
+  기준정보_편집중ID = 기준ID;
+  기준정보_표렌더();
+}
+
+
+function 기준정보_편집취소() {
+
+  기준정보_편집중ID = null;
+  기준정보_표렌더();
+}
+
+
+function 기준정보_이름변경저장(기준ID) {
+
+  const input = document.getElementById('기준정보편집_' + 기준ID);
+  const 새값 = input ? input.value.trim() : '';
+
+  if (!새값) {
+    기준정보_상태표시('값을 입력해주세요.', true);
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+
+      기준정보_편집중ID = null;
+      기준정보_상태표시('이름이 변경되었습니다. 과거 시술 기록의 표기는 바뀌지 않습니다.');
+      기준정보_불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      기준정보_상태표시('변경 실패: ' + (error && error.message ? error.message : error), true);
+    })
+
+    .BASE_이름변경(현재세션.token, { 기준ID: 기준ID, 값: 새값 });
+}
+
+
+/* ================================================================
+   사용중지 / 사용재개 (논리 삭제)
+   ================================================================ */
+
+function 기준정보_사용여부(기준ID, 사용여부) {
+
+  const 문구 = 사용여부
+    ? '이 항목을 사용재개할까요? 시술 등록 드롭다운에 다시 나타납니다.'
+    : '이 항목을 사용중지할까요?\n드롭다운에서 빠지지만 과거 시술 기록은 유지됩니다.';
+
+  if (!confirm(문구)) {
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+
+      기준정보_상태표시(사용여부 ? '사용재개되었습니다.' : '사용중지되었습니다.');
+      기준정보_불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      기준정보_상태표시('처리 실패: ' + (error && error.message ? error.message : error), true);
+    })
+
+    .BASE_사용여부변경(현재세션.token, 기준ID, 사용여부);
+}
+</script>
