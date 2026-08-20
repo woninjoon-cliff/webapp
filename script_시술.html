@@ -4,8 +4,11 @@
    대상 페이지: procedure_main(시술 메인, 요약 전용)
               procedure_register(시술 등록, 드롭다운 + 일괄 입력)
               procedure_history(시술 내역, 검색·수정·취소)
-   서버: Procedure.gs (PROC_*), Base.gs (BASE_*)  /  05_시술 19열
+   서버: Procedure.gs (PROC_*), Base.gs (BASE_*)  /  05_시술 22열
    - 시술명 / 담당실장 / 담당원장 / 패키지여부는 드롭다운(목록 강제)
+   - 내원경로 / 세부 / 방문유형은 드롭다운(목록 강제) + 3개 모두 필수
+     세부는 내원경로 종속: 기준정보 세부 비고 "경로=국내|해외|국내,직원"
+     메타로 옵션을 필터링한다 (상담매출 시트 기준값 탭과 동일)
    - 목록에 없는 값은 빨간 "(목록없음)" 표시로 남고 저장이 차단된다
    - 시술명 선택 시 단위 자동 입력(수정 가능), 분류는 서버 자동 기록
      (기준정보 시술명 비고 "분류=..; 종류=..; 단위=.." 매핑 — 원가표
@@ -21,18 +24,25 @@ let 시술_원본목록 = [];
 let 시술_정렬상태 = { 키: '', 방향: 1 };
 
 /* 기준정보 드롭다운 목록 (BASE_getList로 로딩) */
-let 시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [] };
+let 시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [], 내원경로: [], 세부: [], 방문유형: [] };
 
 /* 시술명 → { 분류, 종류, 단위 } (기준정보 시술명 비고 파싱) */
 let 시술_시술명메타 = {};
 
-/* 입력표 열 순서(고정) — 원가표(비올라셀_신규 원가표) 열 순서와 동일
+/* 세부 → 허용 내원경로 배열 (기준정보 세부 비고 "경로=..." 파싱)
+   메타가 없는 세부 값은 모든 내원경로에서 표시한다 */
+let 시술_세부경로 = {};
+
+/* 입력표 열 순서(고정) — 앞 10열은 원가표(비올라셀_신규 원가표) 열 순서와
+   동일하고, 내원경로/세부/방문유형 3열은 맨 끝에 붙인다
+   (원가표 행 붙여넣기 매핑을 바꾸지 않기 위함. 이 3개는 수기 선택)
    원가표: 환자번호 환자명 담당실장 담당의   시술명 용량 단위 매출금액 ... 비고 패키지여부
-   ERP  : 환자번호 환자명 담당실장 담당원장 시술명 용량 단위 시술금액   비고 패키지여부 */
-const 시술_입력열 = ['환자번호', '환자명', '담당실장', '담당원장', '시술명', '용량', '단위', '시술금액', '비고', '패키지여부'];
+   ERP  : 환자번호 환자명 담당실장 담당원장 시술명 용량 단위 시술금액   비고 패키지여부
+          + 내원경로 세부 방문유형 */
+const 시술_입력열 = ['환자번호', '환자명', '담당실장', '담당원장', '시술명', '용량', '단위', '시술금액', '비고', '패키지여부', '내원경로', '세부', '방문유형'];
 
 /* 열 인덱스 → 셀 형태. select 칸은 기준정보 구분명 또는 '패키지' */
-const 시술_셀형태 = { 2: '담당실장', 3: '담당원장', 4: '시술명', 9: '패키지' };
+const 시술_셀형태 = { 2: '담당실장', 3: '담당원장', 4: '시술명', 9: '패키지', 10: '내원경로', 11: '세부', 12: '방문유형' };
 
 const 시술_구분목록 = ['일반', '회원권', '체험단무료', '다회차'];
 
@@ -78,8 +88,9 @@ function 시술_기준목록불러오기(완료콜백) {
 
     .withSuccessHandler(function(목록) {
 
-      시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [] };
+      시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [], 내원경로: [], 세부: [], 방문유형: [] };
       시술_시술명메타 = {};
+      시술_세부경로 = {};
 
       (목록 || []).forEach(function(r) {
 
@@ -101,6 +112,18 @@ function 시술_기준목록불러오기(완료콜백) {
             종류: 뽑기('종류'),
             단위: 뽑기('단위')
           };
+        }
+
+        // 세부 비고: "경로=국내" / "경로=해외" / "경로=국내,직원"
+        if (r.구분 === '세부') {
+
+          const m = String(r.비고 || '').match(/경로\s*=\s*([^;]*)/);
+
+          if (m) {
+            시술_세부경로[r.값] = m[1].split(',')
+              .map(function(p) { return p.trim(); })
+              .filter(function(p) { return p !== ''; });
+          }
         }
       });
 
@@ -126,6 +149,41 @@ function 시술_옵션HTML(구분, 안내) {
     시술_기준목록[구분].map(function(v) {
       return '<option value="' + 시술_escape(v) + '">' + 시술_escape(v) + '</option>';
     }).join('');
+}
+
+
+/* 세부 옵션 HTML — 내원경로 종속 필터
+   내원경로가 비어 있으면 전체 목록, 선택돼 있으면 해당 경로 허용 값만.
+   경로 메타가 없는 세부 값은 항상 표시한다 */
+function 시술_세부옵션HTML(내원경로) {
+
+  const 목록 = 시술_기준목록.세부.filter(function(v) {
+    const 경로들 = 시술_세부경로[v];
+    if (!내원경로 || !경로들 || 경로들.length === 0) {
+      return true;
+    }
+    return 경로들.indexOf(내원경로) !== -1;
+  });
+
+  return '<option value="">선택</option>' +
+    목록.map(function(v) {
+      return '<option value="' + 시술_escape(v) + '">' + 시술_escape(v) + '</option>';
+    }).join('');
+}
+
+
+/* 세부 select에 내원경로 필터를 적용한다.
+   기존 선택값이 새 목록에 없으면 비운다 */
+function 시술_세부필터적용(세부sel, 내원경로) {
+
+  const 기존값 = 세부sel.value;
+
+  세부sel.innerHTML = 시술_세부옵션HTML(내원경로);
+  세부sel.value = 기존값;
+
+  if (세부sel.value !== 기존값) {
+    세부sel.value = '';
+  }
 }
 
 
@@ -544,6 +602,21 @@ function 시술_내역화면() {
         </div>
 
         <div class="시술폼필드">
+          <label>내원경로 <span class="필수">*</span></label>
+          <select id="시술수정_내원경로" onchange="시술_수정내원경로변경()"></select>
+        </div>
+
+        <div class="시술폼필드">
+          <label>세부 <span class="필수">*</span></label>
+          <select id="시술수정_세부"></select>
+        </div>
+
+        <div class="시술폼필드">
+          <label>방문유형 <span class="필수">*</span></label>
+          <select id="시술수정_방문유형"></select>
+        </div>
+
+        <div class="시술폼필드">
           <label>비고</label>
           <input type="text" id="시술수정_비고">
         </div>
@@ -568,7 +641,8 @@ function 시술_내역화면() {
         <table class="시술표" id="시술표">
           <colgroup>
             <col style="width:92px"><col style="width:85px"><col style="width:80px">
-            <col style="width:75px"><col style="width:140px"><col style="width:85px">
+            <col style="width:75px"><col style="width:70px"><col style="width:85px">
+            <col style="width:70px"><col style="width:140px"><col style="width:85px">
             <col style="width:55px"><col style="width:55px"><col style="width:90px">
             <col style="width:80px"><col style="width:80px"><col style="width:60px">
             <col style="width:55px"><col style="width:95px">
@@ -579,6 +653,9 @@ function 시술_내역화면() {
               <th data-키="환자번호"><span class="th_텍스트" onclick="시술_정렬('환자번호')">환자번호<span class="정렬표시" id="시술정렬_환자번호"></span></span><span class="리사이즈핸들"></span></th>
               <th data-키="환자명"><span class="th_텍스트" onclick="시술_정렬('환자명')">환자명<span class="정렬표시" id="시술정렬_환자명"></span></span><span class="리사이즈핸들"></span></th>
               <th data-키="시술구분"><span class="th_텍스트" onclick="시술_정렬('시술구분')">구분<span class="정렬표시" id="시술정렬_시술구분"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="내원경로"><span class="th_텍스트" onclick="시술_정렬('내원경로')">내원경로<span class="정렬표시" id="시술정렬_내원경로"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="세부"><span class="th_텍스트" onclick="시술_정렬('세부')">세부<span class="정렬표시" id="시술정렬_세부"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="방문유형"><span class="th_텍스트" onclick="시술_정렬('방문유형')">방문유형<span class="정렬표시" id="시술정렬_방문유형"></span></span><span class="리사이즈핸들"></span></th>
               <th data-키="시술명"><span class="th_텍스트" onclick="시술_정렬('시술명')">시술명<span class="정렬표시" id="시술정렬_시술명"></span></span><span class="리사이즈핸들"></span></th>
               <th data-키="분류"><span class="th_텍스트" onclick="시술_정렬('분류')">분류<span class="정렬표시" id="시술정렬_분류"></span></span><span class="리사이즈핸들"></span></th>
               <th><span class="th_텍스트">용량</span><span class="리사이즈핸들"></span></th>
@@ -592,7 +669,7 @@ function 시술_내역화면() {
             </tr>
           </thead>
           <tbody id="시술표본문">
-            <tr><td colspan="14"><div class="시술안내">불러오는 중...</div></td></tr>
+            <tr><td colspan="17"><div class="시술안내">불러오는 중...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -609,6 +686,9 @@ function 시술_내역초기화() {
     document.getElementById('시술수정_시술명').innerHTML = 시술_옵션HTML('시술명', '시술명 선택');
     document.getElementById('시술수정_담당실장').innerHTML = 시술_옵션HTML('담당실장', '선택');
     document.getElementById('시술수정_담당원장').innerHTML = 시술_옵션HTML('담당원장', '선택');
+    document.getElementById('시술수정_내원경로').innerHTML = 시술_옵션HTML('내원경로', '선택');
+    document.getElementById('시술수정_세부').innerHTML = 시술_세부옵션HTML('');
+    document.getElementById('시술수정_방문유형').innerHTML = 시술_옵션HTML('방문유형', '선택');
   });
 
   // 기본: 월별 + 이번 달
@@ -820,7 +900,7 @@ function 시술_테이블렌더() {
   }
 
   if (목록.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14"><div class="시술안내">조회된 시술이 없습니다.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17"><div class="시술안내">조회된 시술이 없습니다.</div></td></tr>';
     return;
   }
 
@@ -833,6 +913,9 @@ function 시술_테이블렌더() {
       '<td>' + 시술_escape(r.환자번호) + '</td>' +
       '<td>' + 시술_escape(r.환자명) + '</td>' +
       '<td>' + 시술_escape(r.시술구분) + '</td>' +
+      '<td>' + 시술_escape(r.내원경로) + '</td>' +
+      '<td title="' + 시술_escape(r.세부) + '">' + 시술_escape(r.세부) + '</td>' +
+      '<td>' + 시술_escape(r.방문유형) + '</td>' +
       '<td title="' + 시술_escape(r.시술명) + '">' + 시술_escape(r.시술명) + '</td>' +
       '<td title="' + 시술_escape(r.분류) + '">' + 시술_escape(r.분류) + '</td>' +
       '<td class="우">' + 시술_escape(r.용량) + '</td>' +
@@ -884,6 +967,13 @@ function 시술_수정폼열기(시술ID) {
   시술_셀렉트값설정(document.getElementById('시술수정_담당실장'), r.담당실장);
   시술_셀렉트값설정(document.getElementById('시술수정_담당원장'), r.담당원장);
 
+  // 내원 정보: 내원경로에 맞춰 세부 옵션을 필터링한 뒤 값 설정
+  // (마이그레이션 전 기존 행은 공란 — 수정 저장 시 반드시 선택해야 한다)
+  시술_셀렉트값설정(document.getElementById('시술수정_내원경로'), r.내원경로);
+  document.getElementById('시술수정_세부').innerHTML = 시술_세부옵션HTML(r.내원경로 || '');
+  시술_셀렉트값설정(document.getElementById('시술수정_세부'), r.세부);
+  시술_셀렉트값설정(document.getElementById('시술수정_방문유형'), r.방문유형);
+
   // 분류는 서버 자동 기록값 표시 (기록이 없으면 매핑으로 미리보기)
   const 메타 = 시술_시술명메타[r.시술명];
   document.getElementById('시술수정_분류').value =
@@ -898,6 +988,16 @@ function 시술_수정폼열기(시술ID) {
 function 시술_수정폼닫기() {
 
   document.getElementById('시술수정폼').classList.remove('열림');
+}
+
+
+/* 수정폼에서 내원경로를 바꾸면 세부 옵션을 필터링 */
+function 시술_수정내원경로변경() {
+
+  시술_세부필터적용(
+    document.getElementById('시술수정_세부'),
+    document.getElementById('시술수정_내원경로').value
+  );
 }
 
 
@@ -923,7 +1023,10 @@ function 시술_수정저장() {
   const 검사대상 = [
     ['시술명', document.getElementById('시술수정_시술명')],
     ['담당실장', document.getElementById('시술수정_담당실장')],
-    ['담당원장', document.getElementById('시술수정_담당원장')]
+    ['담당원장', document.getElementById('시술수정_담당원장')],
+    ['내원경로', document.getElementById('시술수정_내원경로')],
+    ['세부', document.getElementById('시술수정_세부')],
+    ['방문유형', document.getElementById('시술수정_방문유형')]
   ];
 
   for (let i = 0; i < 검사대상.length; i++) {
@@ -947,11 +1050,19 @@ function 시술_수정저장() {
     패키지여부: document.getElementById('시술수정_패키지여부').value,
     담당원장: document.getElementById('시술수정_담당원장').value,
     담당실장: document.getElementById('시술수정_담당실장').value,
+    내원경로: document.getElementById('시술수정_내원경로').value,
+    세부: document.getElementById('시술수정_세부').value,
+    방문유형: document.getElementById('시술수정_방문유형').value,
     비고: document.getElementById('시술수정_비고').value.trim()
   };
 
   if (!data.환자번호 || !data.시술명) {
     alert('환자번호와 시술명은 모두 입력해야 합니다.');
+    return;
+  }
+
+  if (!data.내원경로 || !data.세부 || !data.방문유형) {
+    alert('내원경로·세부·방문유형은 모두 선택해야 합니다.');
     return;
   }
 
@@ -1023,7 +1134,7 @@ function 시술표_컬럼리사이즈초기화() {
   // 저장된 너비 불러오기
   try {
 
-    const 저장 = JSON.parse(localStorage.getItem('시술표_컬럼너비_v2') || 'null');
+    const 저장 = JSON.parse(localStorage.getItem('시술표_컬럼너비_v3') || 'null');
 
     if (Array.isArray(저장)) {
       저장.forEach(function(w, i) {
@@ -1042,7 +1153,7 @@ function 시술표_컬럼리사이즈초기화() {
     });
 
     try {
-      localStorage.setItem('시술표_컬럼너비_v2', JSON.stringify(값));
+      localStorage.setItem('시술표_컬럼너비_v3', JSON.stringify(값));
     } catch (e) { /* 무시 */ }
   }
 
@@ -1123,10 +1234,11 @@ function 시술_등록화면() {
       </div>
 
       <div class="시술도구안내">
-        열 순서(고정): <code>환자번호</code> <code>환자명</code> <code>담당실장</code> <code>담당원장</code> <code>시술명</code> <code>용량</code> <code>단위</code> <code>시술금액</code> <code>비고</code> <code>패키지여부</code><br>
-        시술명·담당실장·담당원장·패키지여부는 드롭다운에서만 선택합니다. 목록 추가는 관리 &gt; 시술/실장/원장 관리에서 합니다.<br>
+        열 순서(고정): <code>환자번호</code> <code>환자명</code> <code>담당실장</code> <code>담당원장</code> <code>시술명</code> <code>용량</code> <code>단위</code> <code>시술금액</code> <code>비고</code> <code>패키지여부</code> <code>내원경로</code> <code>세부</code> <code>방문유형</code><br>
+        시술명·담당실장·담당원장·패키지여부·내원경로·세부·방문유형은 드롭다운에서만 선택합니다. 목록 추가는 관리 &gt; 시술/실장/원장 관리에서 합니다.<br>
         시술명을 선택하면 단위가 자동 입력되고(수정 가능), 분류는 저장 시 자동 기록됩니다.<br>
-        원가표 행을 복사해 1번째 칸에 붙여넣으면 자동으로 맞춰 넣습니다. 목록에 없는 값은 빨간 <code>(목록없음)</code>으로 표시되고 저장이 차단됩니다.
+        내원경로·세부·방문유형은 필수이며, 내원경로를 선택하면 세부 목록이 해당 경로의 채널로 필터링됩니다.<br>
+        원가표 행을 복사해 1번째 칸에 붙여넣으면 자동으로 맞춰 넣습니다(내원 정보 3칸은 수기 선택). 목록에 없는 값은 빨간 <code>(목록없음)</code>으로 표시되고 저장이 차단됩니다.
       </div>
 
       <div class="시술입력표영역">
@@ -1135,13 +1247,14 @@ function 시술_등록화면() {
             <col style="width:40px"><col style="width:95px"><col style="width:85px">
             <col style="width:95px"><col style="width:95px"><col style="width:165px">
             <col style="width:58px"><col style="width:58px"><col style="width:92px">
-            <col><col style="width:92px"><col style="width:55px">
+            <col><col style="width:92px"><col style="width:85px">
+            <col style="width:95px"><col style="width:85px"><col style="width:55px">
           </colgroup>
           <thead>
             <tr>
               <th>No</th><th>환자번호</th><th>환자명</th><th>담당실장</th><th>담당원장</th>
               <th>시술명</th><th>용량</th><th>단위</th><th>시술금액</th><th>비고</th>
-              <th>패키지여부</th><th></th>
+              <th>패키지여부</th><th>내원경로</th><th>세부</th><th>방문유형</th><th></th>
             </tr>
           </thead>
           <tbody id="시술입력표본문"></tbody>
@@ -1212,7 +1325,11 @@ function 시술_행추가() {
     } else if (시술_셀형태[c]) {
 
       el = document.createElement('select');
-      el.innerHTML = 시술_옵션HTML(시술_셀형태[c], c === 4 ? '시술명 선택' : '선택');
+
+      // 세부(11)는 내원경로 종속 — 초기에는 전체 목록
+      el.innerHTML = c === 11
+        ? 시술_세부옵션HTML('')
+        : 시술_옵션HTML(시술_셀형태[c], c === 4 ? '시술명 선택' : '선택');
 
       el.addEventListener('change', function() {
         // 목록에 있는 값으로 바꾸면 오류 표시 제거
@@ -1230,6 +1347,12 @@ function 시술_행추가() {
             const 행셀 = 시술_행셀들(this.closest('tr'));
             행셀[6].value = 메타.단위;
           }
+        }
+
+        // 내원경로 선택 → 같은 행 세부 옵션 필터링
+        if (Number(this.dataset.col) === 10) {
+          const 행셀 = 시술_행셀들(this.closest('tr'));
+          시술_세부필터적용(행셀[11], this.value);
         }
 
         시술_건수갱신();
@@ -1595,7 +1718,7 @@ function 시술_저장() {
     // 목록없음 값 차단 (드롭다운 칸)
     let 목록오류 = false;
 
-    [2, 3, 4].forEach(function(c) {
+    [2, 3, 4, 10, 11, 12].forEach(function(c) {
       const sel = 셀[c];
       const opt = sel.options[sel.selectedIndex];
       if (opt && opt.dataset.목록없음) {
@@ -1609,6 +1732,12 @@ function 시술_저장() {
       return;
     }
 
+    // 내원경로/세부/방문유형 필수 (서버도 재검증한다)
+    if (!셀[10].value || !셀[11].value || !셀[12].value) {
+      오류들.push((i + 1) + '번 행: 내원경로·세부·방문유형은 모두 선택해야 합니다.');
+      return;
+    }
+
     행목록.push({
       환자번호: 환자번호,
       환자명: 셀[1].value.trim(),
@@ -1619,7 +1748,10 @@ function 시술_저장() {
       단위: 셀[6].value.trim(),
       시술금액: 셀[7].value.trim(),
       비고: 셀[8].value.trim(),
-      패키지여부: 셀[9].value
+      패키지여부: 셀[9].value,
+      내원경로: 셀[10].value,
+      세부: 셀[11].value,
+      방문유형: 셀[12].value
     });
   });
 
