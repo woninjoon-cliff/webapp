@@ -4,9 +4,12 @@
    대상 페이지: procedure_main(시술 메인, 요약 전용)
               procedure_register(시술 등록, 드롭다운 + 일괄 입력)
               procedure_history(시술 내역, 검색·수정·취소)
-   서버: Procedure.gs (PROC_*), Base.gs (BASE_*)  /  05_시술 18열
+   서버: Procedure.gs (PROC_*), Base.gs (BASE_*)  /  05_시술 19열
    - 시술명 / 담당실장 / 담당원장 / 패키지여부는 드롭다운(목록 강제)
    - 목록에 없는 값은 빨간 "(목록없음)" 표시로 남고 저장이 차단된다
+   - 시술명 선택 시 단위 자동 입력(수정 가능), 분류는 서버 자동 기록
+     (기준정보 시술명 비고 "분류=..; 종류=..; 단위=.." 매핑 — 원가표
+      원가/드롭다운 탭 B~E열과 동일)
    ===================================================================== */
 
 
@@ -19,6 +22,9 @@ let 시술_정렬상태 = { 키: '', 방향: 1 };
 
 /* 기준정보 드롭다운 목록 (BASE_getList로 로딩) */
 let 시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [] };
+
+/* 시술명 → { 분류, 종류, 단위 } (기준정보 시술명 비고 파싱) */
+let 시술_시술명메타 = {};
 
 /* 입력표 열 순서(고정) — 원가표(비올라셀_신규 원가표) 열 순서와 동일
    원가표: 환자번호 환자명 담당실장 담당의   시술명 용량 단위 매출금액 ... 비고 패키지여부
@@ -73,10 +79,28 @@ function 시술_기준목록불러오기(완료콜백) {
     .withSuccessHandler(function(목록) {
 
       시술_기준목록 = { 시술명: [], 담당실장: [], 담당원장: [] };
+      시술_시술명메타 = {};
 
       (목록 || []).forEach(function(r) {
+
         if (시술_기준목록[r.구분]) {
           시술_기준목록[r.구분].push(r.값);
+        }
+
+        // 시술명 비고: "분류=울쎄라; 종류=레이저; 단위=샷"
+        if (r.구분 === '시술명') {
+
+          const 비고 = String(r.비고 || '');
+          const 뽑기 = function(키) {
+            const m = 비고.match(new RegExp(키 + '\\s*=\\s*([^;]*)'));
+            return m ? m[1].trim() : '';
+          };
+
+          시술_시술명메타[r.값] = {
+            분류: 뽑기('분류') || r.값,
+            종류: 뽑기('종류'),
+            단위: 뽑기('단위')
+          };
         }
       });
 
@@ -478,7 +502,12 @@ function 시술_내역화면() {
 
         <div class="시술폼필드">
           <label>시술명 <span class="필수">*</span></label>
-          <select id="시술수정_시술명"></select>
+          <select id="시술수정_시술명" onchange="시술_수정시술명변경()"></select>
+        </div>
+
+        <div class="시술폼필드">
+          <label>분류 (자동)</label>
+          <input type="text" id="시술수정_분류" readonly>
         </div>
 
         <div class="시술폼필드">
@@ -539,9 +568,10 @@ function 시술_내역화면() {
         <table class="시술표" id="시술표">
           <colgroup>
             <col style="width:92px"><col style="width:85px"><col style="width:80px">
-            <col style="width:75px"><col style="width:140px"><col style="width:55px">
-            <col style="width:55px"><col style="width:90px"><col style="width:80px">
-            <col style="width:80px"><col style="width:60px"><col style="width:55px"><col style="width:95px">
+            <col style="width:75px"><col style="width:140px"><col style="width:85px">
+            <col style="width:55px"><col style="width:55px"><col style="width:90px">
+            <col style="width:80px"><col style="width:80px"><col style="width:60px">
+            <col style="width:55px"><col style="width:95px">
           </colgroup>
           <thead>
             <tr>
@@ -550,6 +580,7 @@ function 시술_내역화면() {
               <th data-키="환자명"><span class="th_텍스트" onclick="시술_정렬('환자명')">환자명<span class="정렬표시" id="시술정렬_환자명"></span></span><span class="리사이즈핸들"></span></th>
               <th data-키="시술구분"><span class="th_텍스트" onclick="시술_정렬('시술구분')">구분<span class="정렬표시" id="시술정렬_시술구분"></span></span><span class="리사이즈핸들"></span></th>
               <th data-키="시술명"><span class="th_텍스트" onclick="시술_정렬('시술명')">시술명<span class="정렬표시" id="시술정렬_시술명"></span></span><span class="리사이즈핸들"></span></th>
+              <th data-키="분류"><span class="th_텍스트" onclick="시술_정렬('분류')">분류<span class="정렬표시" id="시술정렬_분류"></span></span><span class="리사이즈핸들"></span></th>
               <th><span class="th_텍스트">용량</span><span class="리사이즈핸들"></span></th>
               <th><span class="th_텍스트">단위</span><span class="리사이즈핸들"></span></th>
               <th data-키="시술금액"><span class="th_텍스트" onclick="시술_정렬('시술금액')">시술금액<span class="정렬표시" id="시술정렬_시술금액"></span></span><span class="리사이즈핸들"></span></th>
@@ -561,7 +592,7 @@ function 시술_내역화면() {
             </tr>
           </thead>
           <tbody id="시술표본문">
-            <tr><td colspan="13"><div class="시술안내">불러오는 중...</div></td></tr>
+            <tr><td colspan="14"><div class="시술안내">불러오는 중...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -789,7 +820,7 @@ function 시술_테이블렌더() {
   }
 
   if (목록.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="13"><div class="시술안내">조회된 시술이 없습니다.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14"><div class="시술안내">조회된 시술이 없습니다.</div></td></tr>';
     return;
   }
 
@@ -803,6 +834,7 @@ function 시술_테이블렌더() {
       '<td>' + 시술_escape(r.환자명) + '</td>' +
       '<td>' + 시술_escape(r.시술구분) + '</td>' +
       '<td title="' + 시술_escape(r.시술명) + '">' + 시술_escape(r.시술명) + '</td>' +
+      '<td title="' + 시술_escape(r.분류) + '">' + 시술_escape(r.분류) + '</td>' +
       '<td class="우">' + 시술_escape(r.용량) + '</td>' +
       '<td>' + 시술_escape(r.단위) + '</td>' +
       '<td class="우">' + 시술_금액표시(r.시술금액) + '</td>' +
@@ -852,6 +884,11 @@ function 시술_수정폼열기(시술ID) {
   시술_셀렉트값설정(document.getElementById('시술수정_담당실장'), r.담당실장);
   시술_셀렉트값설정(document.getElementById('시술수정_담당원장'), r.담당원장);
 
+  // 분류는 서버 자동 기록값 표시 (기록이 없으면 매핑으로 미리보기)
+  const 메타 = 시술_시술명메타[r.시술명];
+  document.getElementById('시술수정_분류').value =
+    r.분류 || (메타 ? 메타.분류 : '');
+
   const 폼 = document.getElementById('시술수정폼');
   폼.classList.add('열림');
   폼.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -861,6 +898,22 @@ function 시술_수정폼열기(시술ID) {
 function 시술_수정폼닫기() {
 
   document.getElementById('시술수정폼').classList.remove('열림');
+}
+
+
+/* 수정폼에서 시술명을 바꾸면 단위·분류를 매핑값으로 자동 갱신 */
+function 시술_수정시술명변경() {
+
+  const 시술명 = document.getElementById('시술수정_시술명').value;
+  const 메타 = 시술_시술명메타[시술명];
+
+  if (!메타) {
+    document.getElementById('시술수정_분류').value = '';
+    return;
+  }
+
+  document.getElementById('시술수정_단위').value = 메타.단위;
+  document.getElementById('시술수정_분류').value = 메타.분류;
 }
 
 
@@ -877,7 +930,7 @@ function 시술_수정저장() {
     const sel = 검사대상[i][1];
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.dataset.목록없음) {
-      alert(검사대상[i][0] + ' "' + sel.value + '"은(는) 기준정보 목록에 없습니다.\n관리 > 거래처/기본정보에서 먼저 등록하거나 목록에서 선택해주세요.');
+      alert(검사대상[i][0] + ' "' + sel.value + '"은(는) 기준정보 목록에 없습니다.\n관리 > 시술/실장/원장 관리에서 먼저 등록하거나 목록에서 선택해주세요.');
       return;
     }
   }
@@ -1071,7 +1124,8 @@ function 시술_등록화면() {
 
       <div class="시술도구안내">
         열 순서(고정): <code>환자번호</code> <code>환자명</code> <code>담당실장</code> <code>담당원장</code> <code>시술명</code> <code>용량</code> <code>단위</code> <code>시술금액</code> <code>비고</code> <code>패키지여부</code><br>
-        시술명·담당실장·담당원장·패키지여부는 드롭다운에서만 선택합니다. 목록 추가는 관리 &gt; 거래처/기본정보에서 합니다.<br>
+        시술명·담당실장·담당원장·패키지여부는 드롭다운에서만 선택합니다. 목록 추가는 관리 &gt; 시술/실장/원장 관리에서 합니다.<br>
+        시술명을 선택하면 단위가 자동 입력되고(수정 가능), 분류는 저장 시 자동 기록됩니다.<br>
         원가표 행을 복사해 1번째 칸에 붙여넣으면 자동으로 맞춰 넣습니다. 목록에 없는 값은 빨간 <code>(목록없음)</code>으로 표시되고 저장이 차단됩니다.
       </div>
 
@@ -1168,6 +1222,16 @@ function 시술_행추가() {
           Array.prototype.slice.call(this.querySelectorAll('option[data-목록없음]'))
             .forEach(function(o) { o.remove(); });
         }
+
+        // 시술명 선택 → 단위 자동 반영 (원가표 단위매핑과 동일, 이후 수정 가능)
+        if (Number(this.dataset.col) === 4) {
+          const 메타 = 시술_시술명메타[this.value];
+          if (메타) {
+            const 행셀 = 시술_행셀들(this.closest('tr'));
+            행셀[6].value = 메타.단위;
+          }
+        }
+
         시술_건수갱신();
       });
 
@@ -1536,7 +1600,7 @@ function 시술_저장() {
       const opt = sel.options[sel.selectedIndex];
       if (opt && opt.dataset.목록없음) {
         오류들.push((i + 1) + '번 행: ' + 시술_입력열[c] + ' "' + sel.value +
-          '"은(는) 기준정보 목록에 없습니다. 관리 > 거래처/기본정보에서 먼저 등록해주세요.');
+          '"은(는) 기준정보 목록에 없습니다. 관리 > 시술/실장/원장 관리에서 먼저 등록해주세요.');
         목록오류 = true;
       }
     });
