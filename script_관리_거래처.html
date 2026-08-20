@@ -447,7 +447,8 @@ function 거래처_표렌더() {
     const id = 거래처_escape(r.거래처ID);
 
     return '<tr class="' + (r.거래여부 ? '' : '거래처행종료') + '">' +
-      '<td class="거래처아이디">' + id + '</td>' +
+      '<td class="거래처아이디"><span class="거래처명링크" onclick="거래처_상세(\'' + id + '\')">' +
+        id + '</span></td>' +
       '<td><span class="거래처명링크" onclick="거래처_상세(\'' + id + '\')">' +
         거래처_escape(r.거래처명) + '</span></td>' +
       '<td title="' + 거래처_escape(r.취급품목) + '">' + 거래처_셀(r.취급품목) + '</td>' +

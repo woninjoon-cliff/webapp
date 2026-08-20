@@ -534,6 +534,12 @@
       return;
     }
 
+    if (page === 'mgmt_vendor') {
+      content.innerHTML = 거래처_화면();
+      거래처_초기화();
+      return;
+    }
+
 
   if (page === 'mgmt_user') {
 
