@@ -109,6 +109,11 @@
   color: #40385f;
   border-bottom: 1px solid #ece6f7;
   white-space: nowrap;
+  /* 컬럼 너비 조절 핸들(.리사이즈핸들, style_품목.html 전역 정의)이
+     absolute 로 붙으므로 기준이 되는 relative 가 필요하다.
+     overflow: visible 이어야 th 밖으로 나온 핸들이 잘리지 않는다 */
+  position: relative;
+  overflow: visible;
 }
 
 .기준정보표 tbody td {

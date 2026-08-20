@@ -514,6 +514,10 @@
 
     페이지렌더링(page);
 
+    /* 렌더링된 표에 컬럼 너비 조절을 자동 부착.
+       페이지렌더링은 분기마다 return 하므로 여기서 한 번에 처리한다 */
+    표_자동리사이즈적용(page);
+
   }
 
 
@@ -905,5 +909,173 @@
 
     }
   );
+
+
+  /* ================================================================
+     공용: 표 컬럼 너비 드래그 조절 — 자동 적용
+
+     페이지 렌더링이 끝나면 표_자동리사이즈적용(page) 이 콘텐츠 영역의
+     모든 <table> 을 훑어 컬럼 너비 조절을 붙인다.
+     **새 화면에 표를 추가할 때 따로 할 일이 없다.** thead 만 있으면 된다.
+
+     자동 처리 내용:
+       - <colgroup> 이 없으면 컬럼 수만큼 만들어 넣는다
+       - <col data-key> 가 없으면 헤더 텍스트로 채운다 (저장키가 됨)
+       - 각 th 에 .리사이즈핸들 을 주입한다 (마지막 컬럼 제외)
+       - th 가 static 이면 position: relative 를 준다 (핸들이 absolute)
+       - 너비는 localStorage 에 페이지·표 단위로 저장·복원된다
+
+     ★ 이미 마크업에 .리사이즈핸들 이 있는 표는 건너뛴다.
+       품목표/사용자표/거래처표/시술표(내역)는 각자 전용 리사이즈 구현을
+       갖고 있어서, 자동 적용까지 하면 리스너가 이중으로 붙는다.
+       → 그 4개는 기존 구현이 계속 담당한다. 나머지·신규 표가 이 함수 담당.
+       신규 표에는 핸들을 직접 넣지 말 것 (넣으면 자동 적용이 건너뛴다)
+     ================================================================ */
+
+  const 표너비_키접두 = '표너비_v1_';
+
+
+  function 표_너비불러오기(저장키) {
+    try {
+      return JSON.parse(localStorage.getItem(저장키) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+
+  function 표_너비저장(table, 저장키) {
+
+    const 결과 = {};
+
+    table.querySelectorAll('colgroup col').forEach(function(col) {
+      if (col.dataset.key && col.style.width) {
+        결과[col.dataset.key] = col.style.width;
+      }
+    });
+
+    try {
+      localStorage.setItem(저장키, JSON.stringify(결과));
+    } catch (e) {
+      /* 저장 실패는 조용히 무시 (프라이빗 모드 등) */
+    }
+  }
+
+
+  function 표_리사이즈부착(table, 저장키) {
+
+    const thead = table.querySelector('thead');
+
+    if (!thead) return;
+
+    /* 헤더가 여러 줄이면 마지막 줄이 실제 컬럼 줄이다 */
+    const 헤더행 = thead.querySelectorAll('tr');
+
+    if (!헤더행.length) return;
+
+    const ths = 헤더행[헤더행.length - 1].querySelectorAll('th');
+
+    if (ths.length < 2) return;
+
+    /* colspan 이 섞인 헤더는 컬럼 대응이 어긋나므로 건너뛴다 */
+    for (let i = 0; i < ths.length; i++) {
+      if (parseInt(ths[i].getAttribute('colspan') || '1', 10) !== 1) return;
+    }
+
+    /* colgroup 확보 */
+    let colgroup = table.querySelector('colgroup');
+
+    if (!colgroup) {
+      colgroup = document.createElement('colgroup');
+      for (let i = 0; i < ths.length; i++) {
+        colgroup.appendChild(document.createElement('col'));
+      }
+      table.insertBefore(colgroup, table.firstChild);
+    }
+
+    const cols = colgroup.querySelectorAll('col');
+
+    if (cols.length !== ths.length) return;
+
+    /* data-key 보정 — 헤더 텍스트를 키로 (없으면 인덱스) */
+    cols.forEach(function(col, i) {
+      if (!col.dataset.key) {
+        col.dataset.key = (ths[i].textContent || '').trim() || ('열' + i);
+      }
+    });
+
+    /* 저장된 너비 복원 */
+    const 저장 = 표_너비불러오기(저장키);
+
+    cols.forEach(function(col) {
+      if (저장[col.dataset.key]) {
+        col.style.width = 저장[col.dataset.key];
+      }
+    });
+
+    /* 핸들 주입 + 리스너 (마지막 컬럼은 제외 — 끌 대상이 없다) */
+    ths.forEach(function(th, i) {
+
+      if (getComputedStyle(th).position === 'static') {
+        th.style.position = 'relative';
+      }
+
+      if (i === ths.length - 1) return;
+
+      const handle = document.createElement('span');
+      handle.className = '리사이즈핸들';
+      th.appendChild(handle);
+
+      handle.addEventListener('mousedown', function(event) {
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const 대상col = cols[i];
+        const 시작X = event.pageX;
+        const 시작너비 = 대상col.getBoundingClientRect().width;
+
+        document.body.classList.add('리사이즈중');
+        handle.classList.add('활성');
+
+        function 드래그이동(ev) {
+          대상col.style.width =
+            Math.max(40, 시작너비 + (ev.pageX - 시작X)) + 'px';
+        }
+
+        function 드래그종료() {
+          document.removeEventListener('mousemove', 드래그이동);
+          document.removeEventListener('mouseup', 드래그종료);
+          document.body.classList.remove('리사이즈중');
+          handle.classList.remove('활성');
+          표_너비저장(table, 저장키);
+        }
+
+        document.addEventListener('mousemove', 드래그이동);
+        document.addEventListener('mouseup', 드래그종료);
+      });
+    });
+  }
+
+
+  function 표_자동리사이즈적용(page) {
+
+    const content = document.getElementById('콘텐츠');
+
+    if (!content) return;
+
+    content.querySelectorAll('table').forEach(function(table, 표인덱스) {
+
+      /* 전용 구현이 있는 표는 건너뛴다 (리스너 이중 부착 방지).
+         거래처표는 핸들 클래스가 '거래처리사이즈핸들' 이라 클래스명이 정확히
+         일치하지 않는다 → 부분 일치로 잡는다 */
+      if (table.querySelector('[class*="리사이즈핸들"]')) return;
+
+      const 표이름 =
+        (table.className || '').trim().split(/\s+/)[0] || ('표' + 표인덱스);
+
+      표_리사이즈부착(table, 표너비_키접두 + page + '_' + 표이름);
+    });
+  }
 
 </script>

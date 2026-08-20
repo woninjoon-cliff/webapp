@@ -103,8 +103,8 @@ function 기준정보_화면(구분) {
         <table class="기준정보표">
           <colgroup>
             ` + (비고표시
-              ? '<col style="width:90px"><col><col style="width:230px"><col style="width:80px"><col style="width:150px">'
-              : '<col style="width:90px"><col><col style="width:80px"><col style="width:150px">') + `
+              ? '<col data-key="기준ID" style="width:90px"><col data-key="값"><col data-key="비고" style="width:230px"><col data-key="사용여부" style="width:80px"><col data-key="관리" style="width:150px">'
+              : '<col data-key="기준ID" style="width:90px"><col data-key="값"><col data-key="사용여부" style="width:80px"><col data-key="관리" style="width:150px">') + `
           </colgroup>
           <thead>
             <tr>
@@ -132,6 +132,10 @@ function 기준정보_초기화(구분) {
 
   기준정보_현재구분 = 구분;
   기준정보_편집중ID = null;
+
+  /* 컬럼 너비 조절은 script_공통.html 의 표_자동리사이즈적용() 이
+     페이지 렌더링 후 자동으로 붙인다. 여기서 따로 할 일 없음 */
+
   기준정보_불러오기();
 }
 
