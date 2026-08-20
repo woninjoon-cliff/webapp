@@ -1,0 +1,787 @@
+<script>
+/* =====================================================================
+   script_관리_거래처.html — 거래처 관리 프론트
+   대상 페이지: mgmt_vendor
+   서버: Vendor.gs (VENDOR_*)  /  04_거래처 (16열)
+
+   - 메인 표는 수정 버튼만. 거래종료·재개는 상세 팝업에서만 한다
+   - 거래처명 클릭 -> 상세 팝업
+   - 결제조건은 목록 강제하지 않음 (datalist + 직접 입력)
+   - 물리 삭제 없음
+   ===================================================================== */
+
+
+/* ================================================================
+   전역 상태
+   ================================================================ */
+
+let 거래처_전체목록 = [];
+let 거래처_옵션 = { 결제수단: [], 결제조건: [] };
+let 거래처_수정중ID = null;
+let 거래처_상세중ID = null;
+let 거래처_정렬키 = '거래처ID';
+let 거래처_정렬방향 = 1;
+
+const 거래처_입력필드 = [
+  '거래처명', '취급품목', '담당자', '전화번호', '사업자번호',
+  '결제수단', '결제조건', '은행', '계좌번호', '예금주', '메모'
+];
+
+const 거래처_컬럼 = [
+  { 키: '거래처ID', 이름: '거래처ID', 폭: 88,  정렬: true },
+  { 키: '거래처명', 이름: '거래처명', 폭: 160, 정렬: true },
+  { 키: '취급품목', 이름: '취급품목', 폭: 250, 정렬: true },
+  { 키: '담당자',   이름: '담당자',   폭: 120, 정렬: true },
+  { 키: '결제수단', 이름: '결제수단', 폭: 96,  정렬: true },
+  { 키: '결제조건', 이름: '결제조건', 폭: 120, 정렬: true },
+  { 키: '거래여부', 이름: '거래여부', 폭: 88,  정렬: true },
+  { 키: '__관리',   이름: '관리',     폭: 80,  정렬: false }
+];
+
+const 거래처_너비키 = '거래처표_컬럼너비_v1';
+
+
+function 거래처_escape(value) {
+
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+function 거래처_셀(value) {
+
+  const v = String(value === null || value === undefined ? '' : value).trim();
+
+  return v ? 거래처_escape(v) : '<span class="거래처공란">-</span>';
+}
+
+
+function 거래처_수단칩(value) {
+
+  const v = String(value || '').trim();
+
+  if (!v) {
+    return '<span class="거래처공란">-</span>';
+  }
+
+  return '<span class="거래처수단' + (v === '카드' ? ' 카드' : '') + '">' +
+    거래처_escape(v) + '</span>';
+}
+
+
+/* ================================================================
+   화면
+   ================================================================ */
+
+function 거래처_화면() {
+
+  const colgroup = 거래처_컬럼.map(function(c) {
+    return '<col style="width:' + c.폭 + 'px">';
+  }).join('');
+
+  return `
+    <div class="거래처카드">
+
+      <div class="카드제목">거래처 목록</div>
+      <div class="카드설명">발주·입고·미지급 관리에서 사용하는 거래처 명부입니다. 삭제는 없으며 거래종료하면 발주 화면 목록에서만 빠지고 과거 발주·입고·LOT 기록은 유지됩니다.</div>
+
+      <div class="거래처폼 숨김" id="거래처폼">
+        <div class="거래처폼제목">
+          <span id="거래처폼제목텍스트">거래처 등록</span>
+          <span class="아이디" id="거래처폼아이디"></span>
+        </div>
+
+        <div class="거래처폼그리드">
+
+          <div class="거래처폼필드 넓게2">
+            <label>거래처명<span class="필수">*</span></label>
+            <input type="text" id="거래처_f_거래처명" placeholder="예: 케어캠프">
+          </div>
+          <div class="거래처폼필드 넓게2">
+            <label>취급품목</label>
+            <input type="text" id="거래처_f_취급품목" placeholder="예: 울쎄라">
+          </div>
+
+          <div class="거래처폼필드">
+            <label>담당자</label>
+            <input type="text" id="거래처_f_담당자" placeholder="예: 황정필 매니저">
+          </div>
+          <div class="거래처폼필드">
+            <label>전화번호</label>
+            <input type="text" id="거래처_f_전화번호" placeholder="010-0000-0000">
+          </div>
+          <div class="거래처폼필드 넓게2">
+            <label>사업자번호</label>
+            <input type="text" id="거래처_f_사업자번호" placeholder="000-00-00000">
+          </div>
+
+          <div class="거래처폼구분">결제</div>
+
+          <div class="거래처폼필드">
+            <label>결제수단</label>
+            <input type="text" id="거래처_f_결제수단" list="거래처_결제수단목록" placeholder="계좌이체 / 카드">
+            <datalist id="거래처_결제수단목록"></datalist>
+          </div>
+          <div class="거래처폼필드">
+            <label>결제조건<span class="힌트">목록에 없으면 직접 입력</span></label>
+            <input type="text" id="거래처_f_결제조건" list="거래처_결제조건목록" placeholder="선택 또는 직접 입력">
+            <datalist id="거래처_결제조건목록"></datalist>
+          </div>
+          <div class="거래처폼필드 넓게2"></div>
+
+          <div class="거래처폼구분">입금 계좌</div>
+
+          <div class="거래처폼필드">
+            <label>은행</label>
+            <input type="text" id="거래처_f_은행" placeholder="예: 국민은행">
+          </div>
+          <div class="거래처폼필드 넓게2">
+            <label>계좌번호</label>
+            <input type="text" id="거래처_f_계좌번호">
+          </div>
+          <div class="거래처폼필드">
+            <label>예금주</label>
+            <input type="text" id="거래처_f_예금주">
+          </div>
+
+          <div class="거래처폼필드 넓게4">
+            <label>메모</label>
+            <textarea id="거래처_f_메모" placeholder="결제대금 이월 협의 가능업체 등"></textarea>
+          </div>
+
+        </div>
+
+        <div class="거래처폼하단">
+          <span class="거래처폼경고" id="거래처폼경고"></span>
+          <button class="버튼 버튼보조" onclick="거래처_폼닫기()">취소</button>
+          <button class="버튼 버튼주요" onclick="거래처_저장()">저장</button>
+        </div>
+      </div>
+
+      <div class="거래처툴바">
+        <div class="필드 검색">
+          <label>검색</label>
+          <input type="text" id="거래처_검색어" placeholder="거래처ID · 거래처명 · 취급품목 · 담당자 · 전화번호"
+                 oninput="거래처_표렌더()">
+        </div>
+        <div class="필드">
+          <label>거래여부</label>
+          <select id="거래처_거래여부필터" onchange="거래처_표렌더()">
+            <option value="전체">전체</option>
+            <option value="거래중" selected>거래중만</option>
+            <option value="거래종료">거래종료만</option>
+          </select>
+        </div>
+        <div class="필드">
+          <label>결제수단</label>
+          <select id="거래처_결제수단필터" onchange="거래처_표렌더()"></select>
+        </div>
+        <div class="필드">
+          <label>결제조건</label>
+          <select id="거래처_결제조건필터" onchange="거래처_표렌더()"></select>
+        </div>
+        <button class="버튼 버튼주요" onclick="거래처_폼열기(null)">신규 등록</button>
+        <button class="버튼 버튼보조" onclick="거래처_불러오기()">새로고침</button>
+        <div class="거래처툴바여백">
+          <span class="거래처건수" id="거래처_건수"></span>
+        </div>
+      </div>
+
+      <div class="거래처표영역">
+        <table class="거래처표" id="거래처표">
+          <colgroup>` + colgroup + `</colgroup>
+          <thead><tr id="거래처표머리"></tr></thead>
+          <tbody id="거래처표본문">
+            <tr><td colspan="` + 거래처_컬럼.length + `"><div class="거래처안내">불러오는 중...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="거래처상태" id="거래처_상태"></div>
+
+    </div>
+
+    <div class="거래처덮개 숨김" id="거래처상세덮개" onclick="거래처_상세덮개클릭(event)">
+      <div class="거래처상세카드">
+        <div class="거래처상세머리">
+          <div>
+            <h3>
+              <span id="거래처상세제목">거래처 상세</span>
+              <span class="아이디" id="거래처상세아이디"></span>
+            </h3>
+            <div id="거래처상세부제"></div>
+          </div>
+          <button class="거래처상세닫기" onclick="거래처_상세닫기()">&times;</button>
+        </div>
+        <div class="거래처상세본문" id="거래처상세본문"></div>
+        <div class="거래처상세발">
+          <span class="설명" id="거래처상세설명"></span>
+          <button class="버튼 버튼보조" onclick="거래처_상세에서수정()">수정</button>
+          <button class="버튼 버튼보조" id="거래처거래토글버튼" onclick="거래처_거래토글()"></button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+/* ================================================================
+   초기화 (페이지렌더링에서 호출)
+   ================================================================ */
+
+function 거래처_초기화() {
+
+  거래처_수정중ID = null;
+  거래처_상세중ID = null;
+  거래처_정렬키 = '거래처ID';
+  거래처_정렬방향 = 1;
+
+  거래처_머리렌더();
+  거래처표_너비적용();
+  거래처_옵션불러오기();
+  거래처_불러오기();
+}
+
+
+/* ================================================================
+   조회
+   ================================================================ */
+
+function 거래처_옵션불러오기() {
+
+  google.script.run
+
+    .withSuccessHandler(function(결과) {
+
+      거래처_옵션 = 결과 || { 결제수단: [], 결제조건: [] };
+      거래처_옵션렌더();
+    })
+
+    .withFailureHandler(function(error) {
+      거래처_상태표시('결제 옵션을 불러오지 못했습니다: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .VENDOR_옵션목록(현재세션.token);
+}
+
+
+function 거래처_옵션렌더() {
+
+  function datalist채우기(id, 값들) {
+    const el = document.getElementById(id);
+    if (!el) { return; }
+    el.innerHTML = (값들 || []).map(function(v) {
+      return '<option value="' + 거래처_escape(v) + '">';
+    }).join('');
+  }
+
+  function 필터채우기(id, 라벨, 값들) {
+    const el = document.getElementById(id);
+    if (!el) { return; }
+    const 이전 = el.value;
+    el.innerHTML = '<option value="전체">전체</option>' +
+      (값들 || []).map(function(v) {
+        return '<option>' + 거래처_escape(v) + '</option>';
+      }).join('') +
+      '<option value="__공란">' + 라벨 + ' 미입력</option>';
+    if (이전) { el.value = 이전; }
+  }
+
+  // 실제 데이터에 있는 값도 필터에 넣는다 (직접 입력으로 생긴 값 포함)
+  function 합집합(기본, 키) {
+    const 집합 = {};
+    (기본 || []).forEach(function(v) { if (v) { 집합[v] = 1; } });
+    거래처_전체목록.forEach(function(r) { if (r[키]) { 집합[r[키]] = 1; } });
+    return Object.keys(집합).sort(function(a, b) { return a.localeCompare(b, 'ko'); });
+  }
+
+  datalist채우기('거래처_결제수단목록', 거래처_옵션.결제수단);
+  datalist채우기('거래처_결제조건목록', 거래처_옵션.결제조건);
+
+  필터채우기('거래처_결제수단필터', '결제수단', 합집합(거래처_옵션.결제수단, '결제수단'));
+  필터채우기('거래처_결제조건필터', '결제조건', 합집합(거래처_옵션.결제조건, '결제조건'));
+}
+
+
+function 거래처_불러오기() {
+
+  거래처_수정중ID = null;
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      거래처_전체목록 = 목록 || [];
+      거래처_옵션렌더();
+      거래처_표렌더();
+    })
+
+    .withFailureHandler(function(error) {
+
+      const tbody = document.getElementById('거래처표본문');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="' + 거래처_컬럼.length +
+          '"><div class="거래처안내">조회 실패</div></td></tr>';
+      }
+      거래처_상태표시('거래처를 불러오지 못했습니다: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .VENDOR_getList(현재세션.token, { 거래종료포함: true });
+}
+
+
+/* ================================================================
+   표
+   ================================================================ */
+
+function 거래처_머리렌더() {
+
+  const tr = document.getElementById('거래처표머리');
+
+  if (!tr) { return; }
+
+  tr.innerHTML = 거래처_컬럼.map(function(c) {
+
+    const 표시 = (거래처_정렬키 === c.키)
+      ? '<span class="정렬표시">' + (거래처_정렬방향 > 0 ? '▲' : '▼') + '</span>'
+      : '';
+
+    const 라벨 = c.정렬
+      ? '<span class="머리글" onclick="거래처_정렬(\'' + c.키 + '\')">' + 거래처_escape(c.이름) + 표시 + '</span>'
+      : 거래처_escape(c.이름);
+
+    return '<th style="position:sticky;top:0">' + 라벨 +
+      '<span class="거래처리사이즈핸들"></span></th>';
+  }).join('');
+
+  거래처표_리사이즈초기화();
+}
+
+
+function 거래처_정렬(키) {
+
+  if (거래처_정렬키 === 키) {
+    거래처_정렬방향 = 거래처_정렬방향 * -1;
+  } else {
+    거래처_정렬키 = 키;
+    거래처_정렬방향 = 1;
+  }
+
+  거래처_머리렌더();
+  거래처_표렌더();
+}
+
+
+function 거래처_필터목록() {
+
+  const 검색요소 = document.getElementById('거래처_검색어');
+  const 검색 = 검색요소 ? 검색요소.value.trim().toLowerCase() : '';
+
+  const 거래 = (document.getElementById('거래처_거래여부필터') || {}).value || '전체';
+  const 수단 = (document.getElementById('거래처_결제수단필터') || {}).value || '전체';
+  const 조건 = (document.getElementById('거래처_결제조건필터') || {}).value || '전체';
+
+  return 거래처_전체목록.filter(function(r) {
+
+    if (거래 === '거래중' && !r.거래여부) { return false; }
+    if (거래 === '거래종료' && r.거래여부) { return false; }
+
+    if (수단 === '__공란' && r.결제수단) { return false; }
+    if (수단 !== '전체' && 수단 !== '__공란' && r.결제수단 !== 수단) { return false; }
+
+    if (조건 === '__공란' && r.결제조건) { return false; }
+    if (조건 !== '전체' && 조건 !== '__공란' && r.결제조건 !== 조건) { return false; }
+
+    if (!검색) { return true; }
+
+    return [r.거래처ID, r.거래처명, r.취급품목, r.담당자, r.전화번호, r.메모]
+      .join(' ').toLowerCase().indexOf(검색) >= 0;
+
+  }).sort(function(a, b) {
+
+    let x;
+    let y;
+
+    if (거래처_정렬키 === '거래여부') {
+      x = a.거래여부 ? '1' : '0';
+      y = b.거래여부 ? '1' : '0';
+    } else {
+      x = String(a[거래처_정렬키] || '');
+      y = String(b[거래처_정렬키] || '');
+    }
+
+    return x.localeCompare(y, 'ko') * 거래처_정렬방향;
+  });
+}
+
+
+function 거래처_표렌더() {
+
+  const tbody = document.getElementById('거래처표본문');
+
+  if (!tbody) { return; }
+
+  const 목록 = 거래처_필터목록();
+
+  const 건수 = document.getElementById('거래처_건수');
+  if (건수) {
+    const 거래중 = 거래처_전체목록.filter(function(r) { return r.거래여부; }).length;
+    건수.textContent =
+      '조회 ' + 목록.length + '건 / 전체 ' + 거래처_전체목록.length +
+      '건 (거래중 ' + 거래중 + ' · 거래종료 ' + (거래처_전체목록.length - 거래중) + ')';
+  }
+
+  if (목록.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="' + 거래처_컬럼.length +
+      '"><div class="거래처안내">조건에 맞는 거래처가 없습니다.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = 목록.map(function(r) {
+
+    const id = 거래처_escape(r.거래처ID);
+
+    return '<tr class="' + (r.거래여부 ? '' : '거래처행종료') + '">' +
+      '<td class="거래처아이디">' + id + '</td>' +
+      '<td><span class="거래처명링크" onclick="거래처_상세(\'' + id + '\')">' +
+        거래처_escape(r.거래처명) + '</span></td>' +
+      '<td title="' + 거래처_escape(r.취급품목) + '">' + 거래처_셀(r.취급품목) + '</td>' +
+      '<td>' + 거래처_셀(r.담당자) + '</td>' +
+      '<td class="가운데">' + 거래처_수단칩(r.결제수단) + '</td>' +
+      '<td>' + 거래처_셀(r.결제조건) + '</td>' +
+      '<td class="가운데"><span class="거래처배지 ' + (r.거래여부 ? '거래중' : '거래종료') + '">' +
+        (r.거래여부 ? '거래중' : '거래종료') + '</span></td>' +
+      '<td class="가운데">' +
+        '<button class="버튼 버튼보조 버튼작음" onclick="거래처_폼열기(\'' + id + '\')">수정</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+
+function 거래처_상태표시(문구, 오류) {
+
+  const el = document.getElementById('거래처_상태');
+
+  if (!el) { return; }
+
+  el.className = '거래처상태 ' + (오류 ? '오류' : '성공');
+  el.textContent = 문구;
+}
+
+
+function 거래처_찾기(거래처ID) {
+
+  return 거래처_전체목록.filter(function(r) {
+    return r.거래처ID === 거래처ID;
+  })[0] || null;
+}
+
+
+/* ================================================================
+   등록 · 수정 폼
+   ================================================================ */
+
+function 거래처_폼열기(거래처ID) {
+
+  const 폼 = document.getElementById('거래처폼');
+
+  if (!폼) { return; }
+
+  거래처_수정중ID = 거래처ID || null;
+
+  const r = 거래처ID ? (거래처_찾기(거래처ID) || {}) : {};
+
+  document.getElementById('거래처폼제목텍스트').textContent =
+    거래처ID ? '거래처 수정' : '거래처 등록';
+
+  document.getElementById('거래처폼아이디').textContent =
+    거래처ID ? 거래처ID : '(저장 시 자동 채번)';
+
+  거래처_입력필드.forEach(function(k) {
+    const el = document.getElementById('거래처_f_' + k);
+    if (el) { el.value = r[k] || ''; }
+  });
+
+  document.getElementById('거래처폼경고').textContent = '';
+
+  폼.classList.remove('숨김');
+
+  const 첫칸 = document.getElementById('거래처_f_거래처명');
+  if (첫칸) { 첫칸.focus(); }
+}
+
+
+function 거래처_폼닫기() {
+
+  const 폼 = document.getElementById('거래처폼');
+
+  if (폼) { 폼.classList.add('숨김'); }
+
+  거래처_수정중ID = null;
+}
+
+
+function 거래처_저장() {
+
+  const 경고 = document.getElementById('거래처폼경고');
+
+  const data = {};
+
+  거래처_입력필드.forEach(function(k) {
+    const el = document.getElementById('거래처_f_' + k);
+    data[k] = el ? el.value.trim() : '';
+  });
+
+  if (!data.거래처명) {
+    경고.textContent = '거래처명을 입력해주세요.';
+    return;
+  }
+
+  경고.textContent = '';
+
+  const 수정 = !!거래처_수정중ID;
+
+  if (수정) { data.거래처ID = 거래처_수정중ID; }
+
+  const 실행 = google.script.run
+
+    .withSuccessHandler(function(결과) {
+
+      거래처_폼닫기();
+      거래처_상태표시(
+        수정
+          ? '수정되었습니다. (' + 결과.거래처ID + ')'
+          : '"' + 결과.거래처명 + '" 등록되었습니다. (' + 결과.거래처ID + ')'
+      );
+      거래처_옵션불러오기();
+      거래처_불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      경고.textContent = (error && error.message ? error.message : String(error));
+    });
+
+  if (수정) {
+    실행.VENDOR_update(현재세션.token, data);
+  } else {
+    실행.VENDOR_add(현재세션.token, data);
+  }
+}
+
+
+/* ================================================================
+   상세 팝업 (거래종료 · 재개는 여기서만)
+   ================================================================ */
+
+function 거래처_상세(거래처ID) {
+
+  const r = 거래처_찾기(거래처ID);
+
+  if (!r) { return; }
+
+  거래처_상세중ID = 거래처ID;
+
+  document.getElementById('거래처상세제목').textContent = r.거래처명;
+  document.getElementById('거래처상세아이디').textContent = r.거래처ID;
+
+  document.getElementById('거래처상세부제').innerHTML =
+    '<span class="거래처배지 ' + (r.거래여부 ? '거래중' : '거래종료') + '">' +
+    (r.거래여부 ? '거래중' : '거래종료') + '</span>';
+
+  function 줄(라벨, 값, 원시) {
+    return '<div class="거래처상세줄"><span class="라벨">' + 라벨 + '</span>' +
+      '<span class="값">' + (원시 || 거래처_셀(값)) + '</span></div>';
+  }
+
+  let 본문 = '';
+
+  본문 += 줄('취급품목', r.취급품목);
+  본문 += 줄('담당자', r.담당자);
+  본문 += 줄('전화번호', r.전화번호);
+  본문 += 줄('사업자번호', r.사업자번호);
+
+  본문 += '<div class="거래처상세구역">결제</div>';
+  본문 += 줄('결제수단', r.결제수단, 거래처_수단칩(r.결제수단));
+  본문 += 줄('결제조건', r.결제조건);
+
+  본문 += '<div class="거래처상세구역">입금 계좌</div>';
+  본문 += 줄('은행', r.은행);
+  본문 += 줄('계좌번호', r.계좌번호);
+  본문 += 줄('예금주', r.예금주);
+
+  본문 += '<div class="거래처상세구역">메모</div>';
+  본문 += '<div class="거래처상세줄 한줄"><span class="값">' + 거래처_셀(r.메모) + '</span></div>';
+
+  document.getElementById('거래처상세본문').innerHTML = 본문;
+
+  const 버튼 = document.getElementById('거래처거래토글버튼');
+  버튼.textContent = r.거래여부 ? '거래종료' : '거래재개';
+
+  document.getElementById('거래처상세설명').textContent = r.거래여부
+    ? '거래종료해도 발주·입고·LOT 기록은 그대로 남습니다.'
+    : '거래재개하면 발주 화면 거래처 목록에 다시 나타납니다.';
+
+  document.getElementById('거래처상세덮개').classList.remove('숨김');
+}
+
+
+function 거래처_상세덮개클릭(e) {
+
+  if (e && e.target && e.target.id === '거래처상세덮개') {
+    거래처_상세닫기();
+  }
+}
+
+
+function 거래처_상세닫기() {
+
+  const 덮개 = document.getElementById('거래처상세덮개');
+
+  if (덮개) { 덮개.classList.add('숨김'); }
+
+  거래처_상세중ID = null;
+}
+
+
+function 거래처_상세에서수정() {
+
+  const id = 거래처_상세중ID;
+
+  거래처_상세닫기();
+  거래처_폼열기(id);
+}
+
+
+function 거래처_거래토글() {
+
+  if (!거래처_상세중ID) { return; }
+
+  const r = 거래처_찾기(거래처_상세중ID);
+
+  if (!r) { return; }
+
+  const 새값 = !r.거래여부;
+
+  const 문구 = 새값
+    ? '이 거래처를 거래재개할까요? 발주 화면 목록에 다시 나타납니다.'
+    : '이 거래처를 거래종료할까요?\n발주 화면 목록에서 빠지지만 과거 발주·입고·LOT 기록은 유지됩니다.';
+
+  if (!confirm(문구)) { return; }
+
+  const id = 거래처_상세중ID;
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+
+      거래처_상세닫기();
+      거래처_상태표시(새값 ? '거래재개되었습니다.' : '거래종료되었습니다.');
+      거래처_불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      alert('처리 실패\n' + (error && error.message ? error.message : error));
+    })
+
+    .VENDOR_거래여부변경(현재세션.token, id, 새값);
+}
+
+
+/* ================================================================
+   컬럼 너비 드래그 (localStorage)
+   ================================================================ */
+
+function 거래처표_너비적용() {
+
+  let 저장 = {};
+
+  try {
+    저장 = JSON.parse(localStorage.getItem(거래처_너비키) || '{}');
+  } catch (e) {
+    저장 = {};
+  }
+
+  const cols = document.querySelectorAll('#거래처표 colgroup col');
+
+  거래처_컬럼.forEach(function(c, i) {
+    if (저장[c.키] && cols[i]) {
+      cols[i].style.width = 저장[c.키] + 'px';
+    }
+  });
+}
+
+
+function 거래처표_너비저장(키, px) {
+
+  let 저장 = {};
+
+  try {
+    저장 = JSON.parse(localStorage.getItem(거래처_너비키) || '{}');
+  } catch (e) {
+    저장 = {};
+  }
+
+  저장[키] = px;
+
+  try {
+    localStorage.setItem(거래처_너비키, JSON.stringify(저장));
+  } catch (e) {
+    // 저장 실패는 무시 (기능에 영향 없음)
+  }
+}
+
+
+function 거래처표_리사이즈초기화() {
+
+  const ths = document.querySelectorAll('#거래처표머리 th');
+  const cols = document.querySelectorAll('#거래처표 colgroup col');
+
+  Array.prototype.forEach.call(ths, function(th, i) {
+
+    const 핸들 = th.querySelector('.거래처리사이즈핸들');
+
+    if (!핸들 || !cols[i]) { return; }
+
+    핸들.addEventListener('click', function(e) {
+      e.stopPropagation();
+    });
+
+    핸들.addEventListener('mousedown', function(e) {
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      핸들.classList.add('끄는중');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      const 시작X = e.clientX;
+      const 시작폭 = cols[i].getBoundingClientRect().width;
+
+      function 이동(ev) {
+        cols[i].style.width =
+          Math.max(70, 시작폭 + (ev.clientX - 시작X)) + 'px';
+      }
+
+      function 종료() {
+        document.removeEventListener('mousemove', 이동);
+        document.removeEventListener('mouseup', 종료);
+        핸들.classList.remove('끄는중');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        거래처표_너비저장(거래처_컬럼[i].키,
+          Math.round(cols[i].getBoundingClientRect().width));
+      }
+
+      document.addEventListener('mousemove', 이동);
+      document.addEventListener('mouseup', 종료);
+    });
+  });
+}
+</script>

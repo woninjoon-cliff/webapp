@@ -1,0 +1,364 @@
+<style>
+/* =====================================================================
+   style_거래처.html — 구매 > 거래처 관리 (mgmt_vendor)
+
+   공용 클래스는 다시 정의하지 않고 그대로 쓴다.
+     .버튼 / .버튼주요 / .버튼보조 / .버튼작음  → style_품목.html
+     .숨김                                    → style_관리.html
+   단, .카드제목 / .카드설명 / .필드 는 style_기준정보에서
+   ".기준정보카드 ..." 로 한정돼 있어 상속되지 않으므로 여기서 다시 정의한다.
+   ===================================================================== */
+
+.거래처카드 {
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.거래처카드 .카드제목 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #40385f;
+  margin-bottom: 4px;
+}
+
+.거래처카드 .카드설명 {
+  font-size: 12px;
+  color: #8b849d;
+  margin-bottom: 14px;
+  line-height: 1.7;
+}
+
+/* 표 안의 버튼은 행 높이에 맞춰 줄인다 */
+.거래처표 .버튼 {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  font-weight: 400;
+}
+
+/* ---------------- 툴바 ---------------- */
+
+.거래처툴바 {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: 14px 0 12px;
+}
+
+.거래처툴바 .필드 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+}
+
+.거래처툴바 .필드 label {
+  font-size: 11px;
+  color: #8b849d;
+}
+
+.거래처툴바 .필드.검색 { flex: 1; min-width: 220px; }
+
+.거래처툴바 .버튼 { height: 34px; padding: 0 14px; }
+
+.거래처툴바 input[type="text"],
+.거래처툴바 select {
+  width: 100%;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid #eeeaf5;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #40385f;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+}
+
+.거래처툴바 input[type="text"]:focus,
+.거래처툴바 select:focus { border-color: #8064d8; }
+
+.거래처툴바여백 { margin-left: auto; }
+
+.거래처건수 { font-size: 12px; color: #8b849d; white-space: nowrap; }
+
+/* ---------------- 등록·수정 폼 ---------------- */
+
+.거래처폼 {
+  border: 1px solid #eeeaf5;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  background: #fdfcff;
+}
+
+.거래처폼제목 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #40385f;
+  margin-bottom: 14px;
+}
+
+.거래처폼제목 .아이디 {
+  font-weight: 400;
+  font-size: 12px;
+  color: #8b849d;
+  margin-left: 7px;
+}
+
+.거래처폼그리드 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 14px;
+}
+
+.거래처폼필드 { display: flex; flex-direction: column; gap: 4px; }
+.거래처폼필드.넓게2 { grid-column: span 2; }
+.거래처폼필드.넓게4 { grid-column: span 4; }
+
+.거래처폼필드 label { font-size: 12px; color: #8b849d; }
+.거래처폼필드 label .필수 { color: #d92d20; margin-left: 2px; }
+.거래처폼필드 label .힌트 { color: #b6b0c4; margin-left: 4px; }
+
+.거래처폼필드 input,
+.거래처폼필드 select,
+.거래처폼필드 textarea {
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid #eeeaf5;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #40385f;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+}
+
+.거래처폼필드 textarea { height: 52px; padding: 7px 9px; resize: vertical; }
+
+.거래처폼필드 input:focus,
+.거래처폼필드 select:focus,
+.거래처폼필드 textarea:focus { border-color: #8064d8; }
+
+.거래처폼구분 {
+  grid-column: span 4;
+  border-top: 1px solid #eeeaf5;
+  padding-top: 10px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8b849d;
+}
+
+.거래처폼하단 {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.거래처폼경고 {
+  margin-right: auto;
+  font-size: 12px;
+  color: #d92d20;
+}
+
+/* ---------------- 표 ---------------- */
+
+.거래처표영역 { overflow: auto; max-height: calc(100vh - 340px); }
+
+table.거래처표 {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.거래처표 th,
+.거래처표 td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #eeeaf5;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.거래처표 thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f6f2fe;
+  font-size: 12px;
+  font-weight: 700;
+  color: #40385f;
+  user-select: none;
+}
+
+.거래처표 thead th .머리글 { cursor: pointer; display: inline-block; }
+.거래처표 thead th .정렬표시 { color: #8064d8; margin-left: 3px; font-size: 10px; }
+
+.거래처리사이즈핸들 {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.거래처리사이즈핸들::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 4px;
+  width: 1px;
+  background: #ddd6ee;
+}
+
+.거래처리사이즈핸들:hover::after,
+.거래처리사이즈핸들.끄는중::after {
+  background: #8064d8;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.거래처표 tbody tr:hover { background: #faf8ff; }
+.거래처표 td.가운데 { text-align: center; }
+.거래처표 td.거래처아이디 { color: #8b849d; font-variant-numeric: tabular-nums; }
+
+.거래처명링크 { color: #2563eb; font-weight: 600; cursor: pointer; }
+.거래처명링크:hover { text-decoration: underline; }
+
+.거래처배지 {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.거래처배지.거래중 { background: #eef7ee; color: #2e7d32; }
+.거래처배지.거래종료 { background: #f3f1f8; color: #8b849d; }
+
+.거래처수단 {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  background: #f3f0fb;
+  color: #6e52c9;
+}
+
+.거래처수단.카드 { background: #eef4fd; color: #2563eb; }
+
+.거래처행종료 td { color: #b6b0c4; }
+.거래처행종료 .거래처명링크 { color: #b6b0c4; }
+
+.거래처공란 { color: #c4bfd0; }
+
+.거래처안내 { padding: 36px; text-align: center; color: #8b849d; font-size: 13px; }
+
+.거래처상태 { margin-top: 10px; font-size: 12px; min-height: 18px; }
+.거래처상태.성공 { color: #2e7d32; }
+.거래처상태.오류 { color: #d92d20; }
+
+/* ---------------- 상세 팝업 ---------------- */
+
+.거래처덮개 {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 32, 70, .35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+
+.거래처덮개.숨김 { display: none !important; }
+
+.거래처상세카드 {
+  background: #fff;
+  border-radius: 10px;
+  width: 520px;
+  max-width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.거래처상세머리 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid #eeeaf5;
+}
+
+.거래처상세머리 h3 { font-size: 16px; font-weight: 700; color: #40385f; margin-bottom: 4px; }
+.거래처상세머리 .아이디 { font-size: 12px; color: #8b849d; margin-left: 7px; font-weight: 400; }
+
+.거래처상세닫기 {
+  border: none;
+  background: none;
+  font-size: 20px;
+  color: #8b849d;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.거래처상세본문 { padding: 10px 18px 14px; overflow: auto; flex: 1; }
+
+.거래처상세구역 { font-size: 11px; font-weight: 700; color: #8b849d; padding: 14px 0 4px; }
+
+.거래처상세줄 {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f6f4fb;
+  font-size: 13px;
+  color: #40385f;
+}
+
+.거래처상세줄 .라벨 { color: #8b849d; font-size: 12px; }
+.거래처상세줄 .값 { word-break: break-all; }
+.거래처상세줄.한줄 { grid-template-columns: 1fr; }
+
+.거래처상세발 {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 13px 18px;
+  border-top: 1px solid #eeeaf5;
+}
+
+.거래처상세발 .설명 {
+  margin-right: auto;
+  font-size: 11px;
+  color: #8b849d;
+  max-width: 250px;
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .거래처폼그리드 { grid-template-columns: repeat(2, 1fr); }
+  .거래처폼필드.넓게2,
+  .거래처폼필드.넓게4,
+  .거래처폼구분 { grid-column: span 2; }
+}
+</style>
