@@ -590,6 +590,12 @@
       return;
     }
 
+    if (page === 'purchase_order') {
+      content.innerHTML = 발주_화면();
+      발주_초기화();
+      return;
+    }
+
     if (page === 'procedure_history') {
       content.innerHTML = 시술_내역화면();
       /* 내역 표는 머리를 동적으로 그리므로 리사이즈는 시술_내역초기화() 안에서

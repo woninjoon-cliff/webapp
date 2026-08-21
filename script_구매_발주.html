@@ -1,0 +1,625 @@
+<script>
+/* =====================================================================
+   script_구매_발주.html — 발주 도메인 프론트
+   대상 페이지: purchase_order (구매 > 발주)
+   서버: Order.gs (ORDER_*)  /  07_발주 · 08_발주품목
+
+   - 거래처 1곳 = 발주서 1장. 상태: 발주 → 부분입고 → 완료 / 취소
+   - 품목은 input + datalist (타이핑 검색, 시술명과 같은 방식)
+   - ★ 품목을 고르면 단위·입수량이 마스터 규격에서 자동으로 뜨고,
+     발주수량을 넣으면 낱개 환산(= 발주수량 × 입수량)이 실시간 계산된다.
+     이번 입고만 포장이 다르면 입수량 칸만 고치면 된다 (라인 값이 정본)
+   - 단가는 그 품목의 직전 발주 단가 자동 + 수정 가능. 금액은 서버가 재계산
+   ===================================================================== */
+
+let 발주_작성데이터 = { 거래처들: [], 품목들: [], 직전단가: {} };
+let 발주_품목맵 = {};          /* 품목명 → 품목 정보 (datalist 역참조) */
+
+
+function 발주_escape(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+function 발주_금액(n) {
+  return (Number(n) || 0).toLocaleString('ko-KR');
+}
+
+
+/* ================================================================
+   화면
+   ================================================================ */
+
+function 발주_화면() {
+
+  return `
+    <div class="시술폼카드">
+
+      <div class="시술공통줄">
+        <div class="필드">
+          <label>거래처 <span class="필수">*</span></label>
+          <select id="발주_거래처" style="width:200px"></select>
+        </div>
+        <div class="필드">
+          <label>발주일 <span class="필수">*</span></label>
+          <input type="date" id="발주_발주일">
+        </div>
+        <div class="필드" style="flex:1">
+          <label>비고</label>
+          <input type="text" id="발주_비고" style="width:100%">
+        </div>
+      </div>
+
+      <div class="시술안내">
+        품목을 고르면 단위·입수량이 자동으로 채워집니다. 이번 입고만 포장(개입 수)이 다르면 <strong>입수량 칸만 고치세요</strong> — 낱개 환산이 따라 바뀝니다.
+        단가는 직전 발주 값이 자동으로 들어오고 고칠 수 있습니다.
+      </div>
+
+      <div class="발주입력표영역">
+        <table class="발주입력표">
+          <!-- 열 수 9 = No + 입력 7 + 삭제. 발주_행추가와 함께 움직인다 -->
+          <colgroup>
+            <col style="width:40px"><col style="width:240px"><col style="width:90px">
+            <col style="width:70px"><col style="width:90px"><col style="width:110px">
+            <col style="width:110px"><col style="width:120px"><col style="width:55px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>No</th><th>품목</th><th>발주수량</th><th>단위</th>
+              <th>입수량</th><th>낱개 환산</th><th>단가</th><th>금액</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="발주입력표본문"></tbody>
+        </table>
+      </div>
+
+      <div class="시술등록하단">
+        <div>
+          <button class="버튼 버튼보조" onclick="발주_행추가()">행 추가</button>
+        </div>
+        <div class="건수" id="발주_합계문구">총 0건 · 0원</div>
+        <div class="버튼들">
+          <button class="버튼 버튼주요" id="발주_저장버튼" onclick="발주_저장()">발주 등록</button>
+        </div>
+      </div>
+
+      <div id="발주_상태" class="시술상태"></div>
+
+    </div>
+
+
+    <div class="시술폼카드">
+
+      <div class="카드제목">발주 목록</div>
+
+      <div class="시술표영역">
+        <table class="발주표 목록표">
+          <colgroup>
+            <col data-key="발주ID"><col data-key="거래처"><col data-key="발주일">
+            <col data-key="품목수"><col data-key="총액"><col data-key="상태"><col data-key="관리">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>발주ID</th><th>거래처</th><th>발주일</th>
+              <th>품목수</th><th>총액</th><th>상태</th><th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="발주표본문">
+            <tr><td colspan="7"><div class="품목안내">불러오는 중입니다...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="시술안내">
+        행을 클릭하면 품목 내역을 볼 수 있습니다. 취소는 입고가 시작되기 전(상태 '발주')에만 가능합니다.
+      </div>
+
+    </div>
+
+
+    <datalist id="발주_품목목록"></datalist>
+
+
+    <!-- 상세 팝업 (시술 상세 팝업 구조 재활용: .시술덮개/.시술상세카드) -->
+    <div class="시술덮개 숨김" id="발주상세배경" onclick="if (event.target === this) 발주_상세닫기()">
+      <div class="시술상세카드" style="max-width:880px">
+        <div class="시술상세머리">
+          <div>
+            <h3><span id="발주상세제목">발주 상세</span></h3>
+            <div class="부제" id="발주상세정보"></div>
+          </div>
+          <button class="시술상세닫기" onclick="발주_상세닫기()">&times;</button>
+        </div>
+        <div class="시술상세본문">
+          <table class="발주상세표 목록표">
+            <colgroup>
+              <col><col style="width:80px"><col style="width:60px"><col style="width:80px">
+              <col style="width:90px"><col style="width:90px"><col style="width:100px">
+              <col style="width:90px"><col style="width:70px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>품목</th><th>발주수량</th><th>단위</th><th>입수량</th>
+                <th>낱개 환산</th><th>단가</th><th>금액</th><th>입고/미입고</th><th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="발주상세본문"></tbody>
+          </table>
+        </div>
+        <div class="시술상세발">
+          <span class="설명"></span>
+          <button class="버튼 버튼보조" onclick="발주_상세닫기()">닫기</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+/* ================================================================
+   초기화 — 작성 데이터와 목록을 병렬로 받는다
+   ================================================================ */
+
+function 발주_초기화() {
+
+  document.getElementById('발주_발주일').value = 시술_오늘문자열();
+
+  google.script.run
+
+    .withSuccessHandler(function(데이터) {
+
+      발주_작성데이터 = 데이터 || { 거래처들: [], 품목들: [], 직전단가: {} };
+
+      발주_품목맵 = {};
+      발주_작성데이터.품목들.forEach(function(p) {
+        발주_품목맵[p.품목명] = p;
+      });
+
+      document.getElementById('발주_거래처').innerHTML =
+        '<option value="">거래처 선택</option>' +
+        발주_작성데이터.거래처들.map(function(v) {
+          return '<option value="' + 발주_escape(v.거래처ID) + '">' +
+            발주_escape(v.거래처명) + '</option>';
+        }).join('');
+
+      document.getElementById('발주_품목목록').innerHTML =
+        발주_작성데이터.품목들.map(function(p) {
+          return '<option value="' + 발주_escape(p.품목명) + '">';
+        }).join('');
+
+      발주_입력표비우기();
+    })
+
+    .withFailureHandler(function(error) {
+      발주_상태표시('작성 정보를 불러오지 못했습니다: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .ORDER_작성데이터(현재세션.token);
+
+  발주_목록불러오기();
+}
+
+
+function 발주_상태표시(문구, 오류) {
+
+  const el = document.getElementById('발주_상태');
+
+  if (!el) return;
+
+  el.className = '시술상태' + (오류 ? ' 오류' : (문구 ? ' 성공' : ''));
+  el.textContent = 문구 || '';
+}
+
+
+/* ================================================================
+   입력표
+   ================================================================ */
+
+function 발주_입력표비우기() {
+
+  const tbody = document.getElementById('발주입력표본문');
+
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  for (let i = 0; i < 3; i++) {
+    발주_행추가();
+  }
+
+  발주_합계갱신();
+}
+
+
+function 발주_행추가() {
+
+  const tbody = document.getElementById('발주입력표본문');
+  const tr = document.createElement('tr');
+
+  const 번호칸 = document.createElement('td');
+  번호칸.className = '번호칸';
+  tr.appendChild(번호칸);
+
+  /* 품목 (datalist 타이핑 검색) */
+  const 품목칸 = document.createElement('td');
+  const 품목 = document.createElement('input');
+  품목.type = 'text';
+  품목.autocomplete = 'off';
+  품목.setAttribute('list', '발주_품목목록');
+  품목.placeholder = '예: 울쎄라 4.5';
+  품목.addEventListener('change', function() { 발주_행품목변경(tr); });
+  품목칸.appendChild(품목);
+  tr.appendChild(품목칸);
+
+  /* 발주수량 */
+  const 수량칸 = document.createElement('td');
+  const 수량 = document.createElement('input');
+  수량.type = 'number';
+  수량.min = '1';
+  수량.addEventListener('input', function() { 발주_행계산(tr); });
+  수량칸.appendChild(수량);
+  tr.appendChild(수량칸);
+
+  /* 단위 (자동, 수정 가능) */
+  const 단위칸 = document.createElement('td');
+  const 단위 = document.createElement('input');
+  단위.type = 'text';
+  단위칸.appendChild(단위);
+  tr.appendChild(단위칸);
+
+  /* 입수량 (자동 + 이번 회차만 덮어쓰기) */
+  const 입수칸 = document.createElement('td');
+  const 입수 = document.createElement('input');
+  입수.type = 'number';
+  입수.min = '1';
+  입수.addEventListener('input', function() { 발주_행계산(tr); });
+  입수칸.appendChild(입수);
+  tr.appendChild(입수칸);
+
+  /* 낱개 환산 (계산 표시 전용) */
+  const 낱개칸 = document.createElement('td');
+  낱개칸.className = '우';
+  낱개칸.textContent = '-';
+  tr.appendChild(낱개칸);
+
+  /* 단가 (직전 단가 자동, 실시간 콤마) */
+  const 단가칸 = document.createElement('td');
+  const 단가 = document.createElement('input');
+  단가.type = 'text';
+  단가.className = '금액칸';
+  if (typeof 금액칸_붙이기 === 'function') {
+    금액칸_붙이기(단가);
+  }
+  단가.addEventListener('input', function() { 발주_행계산(tr); });
+  단가칸.appendChild(단가);
+  tr.appendChild(단가칸);
+
+  /* 금액 (계산 표시 전용 — 서버도 재계산한다) */
+  const 금액칸td = document.createElement('td');
+  금액칸td.className = '우';
+  금액칸td.textContent = '-';
+  tr.appendChild(금액칸td);
+
+  /* 삭제 */
+  const 삭제칸 = document.createElement('td');
+  삭제칸.className = '가운데';
+  const 삭제 = document.createElement('span');
+  삭제.className = '행삭제';
+  삭제.textContent = '×';
+  삭제.onclick = function() {
+    tr.remove();
+    발주_번호갱신();
+    발주_합계갱신();
+  };
+  삭제칸.appendChild(삭제);
+  tr.appendChild(삭제칸);
+
+  tbody.appendChild(tr);
+  발주_번호갱신();
+
+  return tr;
+}
+
+
+function 발주_행셀들(tr) {
+  /* [품목, 수량, 단위, 입수량, 낱개td, 단가, 금액td] */
+  return {
+    품목: tr.children[1].querySelector('input'),
+    수량: tr.children[2].querySelector('input'),
+    단위: tr.children[3].querySelector('input'),
+    입수량: tr.children[4].querySelector('input'),
+    낱개: tr.children[5],
+    단가: tr.children[6].querySelector('input'),
+    금액: tr.children[7]
+  };
+}
+
+
+/* 품목 확정 → 단위·입수량·직전 단가 자동 채움 */
+function 발주_행품목변경(tr) {
+
+  const 셀 = 발주_행셀들(tr);
+  const 정보 = 발주_품목맵[셀.품목.value.trim()];
+
+  셀.품목.classList.toggle('시술오류칸', !!셀.품목.value.trim() && !정보);
+
+  if (!정보) {
+    발주_행계산(tr);
+    return;
+  }
+
+  셀.단위.value = 정보.발주단위기본;
+  셀.입수량.value = 정보.입수량기본;
+
+  const 직전 = 발주_작성데이터.직전단가[정보.품목ID];
+
+  if (직전 && !셀.단가.value) {
+    셀.단가.value = 금액칸_표시(직전.단가);
+  }
+
+  발주_행계산(tr);
+}
+
+
+/* 낱개 환산·금액 실시간 계산 */
+function 발주_행계산(tr) {
+
+  const 셀 = 발주_행셀들(tr);
+  const 수량 = Number(셀.수량.value) || 0;
+  const 입수 = Number(셀.입수량.value) || 1;
+  const 단가 = Number(금액칸_값(셀.단가)) || 0;
+
+  const 정보 = 발주_품목맵[셀.품목.value.trim()];
+  const 사용단위 = 정보 ? 정보.단위 : '';
+
+  셀.낱개.textContent = 수량 > 0
+    ? '= ' + 발주_금액(수량 * 입수) + ' ' + (사용단위 || '개')
+    : '-';
+
+  셀.금액.textContent = (수량 > 0 && 단가 > 0)
+    ? 발주_금액(수량 * 단가)
+    : '-';
+
+  발주_합계갱신();
+}
+
+
+function 발주_번호갱신() {
+
+  const rows = document.querySelectorAll('#발주입력표본문 tr');
+
+  rows.forEach(function(tr, i) {
+    tr.children[0].textContent = i + 1;
+  });
+}
+
+
+function 발주_합계갱신() {
+
+  let 건수 = 0;
+  let 합계 = 0;
+
+  document.querySelectorAll('#발주입력표본문 tr').forEach(function(tr) {
+
+    const 셀 = 발주_행셀들(tr);
+
+    if (!셀.품목.value.trim()) return;
+
+    건수++;
+    합계 += (Number(셀.수량.value) || 0) * (Number(금액칸_값(셀.단가)) || 0);
+  });
+
+  const el = document.getElementById('발주_합계문구');
+
+  if (el) {
+    el.textContent = '총 ' + 건수 + '건 · ' + 발주_금액(합계) + '원';
+  }
+}
+
+
+/* ================================================================
+   저장
+   ================================================================ */
+
+function 발주_저장() {
+
+  const 거래처ID = document.getElementById('발주_거래처').value;
+  const 발주일 = document.getElementById('발주_발주일').value;
+
+  if (!거래처ID || !발주일) {
+    발주_상태표시('거래처와 발주일을 입력해주세요.', true);
+    return;
+  }
+
+  const 품목들 = [];
+  let 입력오류 = null;
+
+  document.querySelectorAll('#발주입력표본문 tr').forEach(function(tr, i) {
+
+    const 셀 = 발주_행셀들(tr);
+    const 이름 = 셀.품목.value.trim();
+
+    if (!이름) return;   /* 빈 행은 건너뜀 */
+
+    const 정보 = 발주_품목맵[이름];
+
+    if (!정보) {
+      입력오류 = 입력오류 || ((i + 1) + '번 행: 품목 "' + 이름 + '" 은(는) 품목 목록에 없습니다.');
+      return;
+    }
+
+    if (!(Number(셀.수량.value) > 0)) {
+      입력오류 = 입력오류 || ((i + 1) + '번 행: 발주수량을 입력해주세요.');
+      return;
+    }
+
+    품목들.push({
+      품목ID: 정보.품목ID,
+      발주수량: 셀.수량.value,
+      단위: 셀.단위.value.trim(),
+      입수량: 셀.입수량.value,
+      단가: 금액칸_값(셀.단가),
+      비고: ''
+    });
+  });
+
+  if (입력오류) {
+    발주_상태표시(입력오류, true);
+    return;
+  }
+
+  if (품목들.length === 0) {
+    발주_상태표시('발주할 품목을 1개 이상 입력해주세요.', true);
+    return;
+  }
+
+  const 버튼 = document.getElementById('발주_저장버튼');
+  버튼.disabled = true;
+  버튼.textContent = '저장 중...';
+
+  google.script.run
+
+    .withSuccessHandler(function(결과) {
+      버튼.disabled = false;
+      버튼.textContent = '발주 등록';
+      발주_상태표시('발주 ' + 결과.발주ID + ' 등록되었습니다 (' + 결과.품목수 + '개 품목).');
+      document.getElementById('발주_비고').value = '';
+      발주_입력표비우기();
+      발주_목록불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      버튼.disabled = false;
+      버튼.textContent = '발주 등록';
+      발주_상태표시('등록 실패: ' + (error && error.message ? error.message : error), true);
+    })
+
+    .ORDER_add(현재세션.token, {
+      거래처ID: 거래처ID,
+      발주일: 발주일,
+      비고: document.getElementById('발주_비고').value.trim(),
+      품목들: 품목들
+    });
+}
+
+
+/* ================================================================
+   목록 · 상세 · 취소
+   ================================================================ */
+
+function 발주_목록불러오기() {
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      const tbody = document.getElementById('발주표본문');
+
+      if (!tbody) return;
+
+      if (!목록 || 목록.length === 0) {
+        tbody.innerHTML =
+          '<tr><td colspan="7"><div class="품목안내">등록된 발주가 없습니다.</div></td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = 목록.map(function(r) {
+
+        const 취소가능 = r.발주상태 === '발주';
+
+        return '<tr onclick="발주_상세열기(\'' + 발주_escape(r.발주ID) + '\')" style="cursor:pointer">' +
+          '<td>' + 발주_escape(r.발주ID) + '</td>' +
+          '<td>' + 발주_escape(r.거래처명) + '</td>' +
+          '<td>' + 발주_escape(r.발주일) + '</td>' +
+          '<td class="우">' + r.품목수 + '</td>' +
+          '<td class="우">' + 발주_금액(r.총액) + '</td>' +
+          '<td class="가운데">' + 발주_escape(r.발주상태) + '</td>' +
+          '<td class="가운데">' +
+            (취소가능
+              ? '<span class="시술링크" onclick="event.stopPropagation(); 발주_취소(\'' + 발주_escape(r.발주ID) + '\')">취소</span>'
+              : '-') +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    })
+
+    .withFailureHandler(function(error) {
+      발주_상태표시('목록을 불러오지 못했습니다: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .ORDER_getList(현재세션.token, {});
+}
+
+
+function 발주_상세열기(발주ID) {
+
+  google.script.run
+
+    .withSuccessHandler(function(상세) {
+
+      document.getElementById('발주상세제목').textContent =
+        '발주 상세 — ' + 상세.발주ID;
+
+      document.getElementById('발주상세정보').innerHTML =
+        발주_escape(상세.거래처명) + ' · ' + 발주_escape(상세.발주일) +
+        ' · 상태 <strong>' + 발주_escape(상세.발주상태) + '</strong>' +
+        (상세.비고 ? ' · ' + 발주_escape(상세.비고) : '');
+
+      document.getElementById('발주상세본문').innerHTML =
+        상세.품목들.map(function(p) {
+          return '<tr>' +
+            '<td>' + 발주_escape(p.품목명) + '</td>' +
+            '<td class="우">' + 발주_금액(p.발주수량) + '</td>' +
+            '<td>' + 발주_escape(p.단위) + '</td>' +
+            '<td class="우">' + 발주_금액(p.입수량) + '</td>' +
+            '<td class="우">' + 발주_금액(p.낱개수량) + '</td>' +
+            '<td class="우">' + 발주_금액(p.단가) + '</td>' +
+            '<td class="우">' + 발주_금액(p.금액) + '</td>' +
+            '<td class="가운데">' + 발주_금액(p.입고수량) + ' / ' + 발주_금액(p.미입고수량) + '</td>' +
+            '<td class="가운데">' + 발주_escape(p.상태) + '</td>' +
+          '</tr>';
+        }).join('');
+
+      document.getElementById('발주상세배경').classList.remove('숨김');
+    })
+
+    .withFailureHandler(function(error) {
+      발주_상태표시('상세를 불러오지 못했습니다: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .ORDER_상세(현재세션.token, 발주ID);
+}
+
+
+function 발주_상세닫기() {
+  document.getElementById('발주상세배경').classList.add('숨김');
+}
+
+
+function 발주_취소(발주ID) {
+
+  if (!confirm(발주ID + ' 발주를 취소할까요?')) {
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+      발주_상태표시(발주ID + ' 발주가 취소되었습니다.');
+      발주_목록불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      발주_상태표시('취소 실패: ' + (error && error.message ? error.message : error), true);
+    })
+
+    .ORDER_취소(현재세션.token, 발주ID);
+}
+</script>
