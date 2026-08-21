@@ -549,6 +549,9 @@ function ITEM_save(token, data) {
 
     SpreadsheetApp.flush();
 
+    // DB 레이어를 거치지 않고 직접 썼으므로 캐시를 비운다 (DB.gs 참조)
+    DB_캐시비우기('품목');
+
     return '품목 수정이 완료되었습니다.';
 
   }
@@ -611,6 +614,8 @@ function ITEM_save(token, data) {
 
 
   SpreadsheetApp.flush();
+
+  DB_캐시비우기('품목');
 
 
   return '품목 등록이 완료되었습니다.';
@@ -776,6 +781,8 @@ function ITEM_delete(token, 품목ID) {
   }
 
   SpreadsheetApp.flush();
+
+  DB_캐시비우기('품목');
 
 
   return '품목이 사용중지되었습니다. 목록에서만 빠지고 과거 기록은 유지됩니다.';
@@ -1001,6 +1008,8 @@ function ITEM_시트재구성() {
   sheet.autoResizeColumns(1, 새헤더.length);
 
   SpreadsheetApp.flush();
+
+  DB_캐시비우기('품목');
 
   Logger.log(
     '03_품목 재구성 완료: 총 ' + 새행.length +

@@ -380,6 +380,8 @@ function USER_save(token, data) {
 
       SpreadsheetApp.flush();
 
+      DB_캐시비우기('사용자');
+
       return '사용자 정보가 수정되었습니다.';
     }
 
@@ -407,6 +409,8 @@ function USER_save(token, data) {
     ]);
 
     SpreadsheetApp.flush();
+
+    DB_캐시비우기('사용자');
 
     return '사용자 등록이 완료되었습니다.';
 
@@ -480,6 +484,8 @@ function USER_사용여부변경(token, 사용자ID, 사용여부) {
     sheet.getRange(targetIndex + 2, 10).setValue(new Date());
 
     SpreadsheetApp.flush();
+
+    DB_캐시비우기('사용자');
 
     return 값
       ? '사용으로 변경되었습니다.'

@@ -57,7 +57,51 @@ function DB_getSheet(tableName) {
 // Headers
 // =====================================================================
 
+// =====================================================================
+// 요청 단위 캐시 (2026-08-21)
+//
+// 배경: DB_getAll 은 호출할 때마다 시트를 통째로 다시 읽었다.
+//   시술 저장 1회에 05_시술 3회 + 14_기준정보 9회 + 15_회원권 1회 = 13회 읽기.
+//   PROC_새ID목록_ 은 최대 ID 하나 찾자고 05_시술 전체를 읽는다.
+//   시술 100건/일이면 1년에 3만 행이 되므로 이대로면 저장이 수 초씩 걸린다.
+//
+// 동작: google.script.run 호출마다 스크립트가 새로 실행되므로,
+//   전역 객체에 담아두면 캐시 수명이 자연스럽게 "요청 1회" 가 된다.
+//   요청이 끝나면 사라지므로 다른 사용자의 변경을 못 보는 일은 없다.
+//
+// ★ 쓰기 후에는 반드시 무효화해야 한다.
+//   DB_insert / DB_insertMany / DB_updateById 는 자동으로 비운다.
+//   **DB 레이어를 거치지 않고 시트에 직접 쓰는 함수**(setValue·appendRow·
+//   deleteRow·clear 등)는 쓴 뒤 DB_캐시비우기(테이블명) 를 직접 호출해야 한다.
+//   현재 해당 함수: ITEM_save / ITEM_delete / ITEM_시트재구성 /
+//   USER_save / USER_사용여부변경 / HOSPITAL_save /
+//   BASE_시트생성및시딩 / PROC_시트재구성
+//   → 새로 직접 쓰기를 추가하면 무효화도 함께 넣을 것
+// =====================================================================
+
+var DB_캐시_행 = {};
+var DB_캐시_헤더 = {};
+
+
+function DB_캐시비우기(tableName) {
+
+  if (tableName === undefined || tableName === null) {
+    DB_캐시_행 = {};
+    DB_캐시_헤더 = {};
+    return;
+  }
+
+  delete DB_캐시_행[tableName];
+  delete DB_캐시_헤더[tableName];
+}
+
+
 function DB_getHeaders(tableName) {
+
+  if (DB_캐시_헤더[tableName]) {
+    return DB_캐시_헤더[tableName];
+  }
+
   const sheet = DB_getSheet(tableName);
   const lastColumn = sheet.getLastColumn();
 
@@ -65,9 +109,13 @@ function DB_getHeaders(tableName) {
     return [];
   }
 
-  return sheet
+  const headers = sheet
     .getRange(1, 1, 1, lastColumn)
     .getValues()[0];
+
+  DB_캐시_헤더[tableName] = headers;
+
+  return headers;
 }
 
 
@@ -76,12 +124,19 @@ function DB_getHeaders(tableName) {
 // =====================================================================
 
 function DB_getAll(tableName) {
+
+  if (DB_캐시_행[tableName]) {
+    return DB_캐시_행[tableName];
+  }
+
   const sheet = DB_getSheet(tableName);
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
 
   if (lastRow <= 1 || lastColumn === 0) {
-    return [];
+    // 빈 시트도 캐시한다 (같은 요청에서 반복 호출되는 경우가 있다)
+    DB_캐시_행[tableName] = [];
+    return DB_캐시_행[tableName];
   }
 
   const headers = DB_getHeaders(tableName);
@@ -90,7 +145,7 @@ function DB_getAll(tableName) {
     .getRange(2, 1, lastRow - 1, lastColumn)
     .getValues();
 
-  return values.map(function(row) {
+  const rows = values.map(function(row) {
     const obj = {};
 
     headers.forEach(function(header, index) {
@@ -99,6 +154,10 @@ function DB_getAll(tableName) {
 
     return obj;
   });
+
+  DB_캐시_행[tableName] = rows;
+
+  return rows;
 }
 
 
@@ -170,6 +229,8 @@ function DB_insert(tableName, data) {
       .getRange(sheet.getLastRow() + 1, 1, 1, headers.length)
       .setValues([row]);
 
+    DB_캐시비우기(tableName);
+
     return data;
 
   } finally {
@@ -211,6 +272,8 @@ function DB_insertMany(tableName, dataList) {
         headers.length
       )
       .setValues(rows);
+
+    DB_캐시비우기(tableName);
 
     return dataList;
 
@@ -266,6 +329,8 @@ function DB_updateById(tableName, idField, idValue, updates) {
       sheet
         .getRange(i + 2, 1, 1, headers.length)
         .setValues([values[i]]);
+
+      DB_캐시비우기(tableName);
 
       return true;
     }

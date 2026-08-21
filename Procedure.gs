@@ -1079,6 +1079,8 @@ function PROC_시트재구성() {
 
   SpreadsheetApp.flush();
 
+  DB_캐시비우기('시술');
+
   Logger.log('05_시술 재구성 완료: ' + 새행.length +
     '건 이관, 22열(내원경로/세부/방문유형 추가 — 기존 행은 공란)');
 }

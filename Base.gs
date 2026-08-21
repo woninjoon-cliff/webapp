@@ -527,6 +527,8 @@ function BASE_시트생성및시딩() {
 
   SpreadsheetApp.flush();
 
+  DB_캐시비우기('기준정보');
+
   Logger.log(
     '14_기준정보 생성·시딩 완료: 병원 ' + 병원들.length + '곳 x (시술명 ' +
     시술명들.length + ' + 실장 ' + 실장들.length + ' + 원장 ' + 원장들.length +

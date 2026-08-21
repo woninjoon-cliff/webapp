@@ -251,6 +251,8 @@ function HOSPITAL_save(token, data) {
 
     SpreadsheetApp.flush();
 
+    DB_캐시비우기('병원');
+
     return '병원 정보가 수정되었습니다.';
 
   } finally {
