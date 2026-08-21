@@ -573,7 +573,12 @@ function 시술_셀값설정(el, 열, v) {
     return;
   }
 
-  el.value = String(v === null || v === undefined ? '' : v).trim();
+  const 값 = String(v === null || v === undefined ? '' : v).trim();
+
+  /* 금액칸은 콤마를 찍어 넣는다. 값을 코드로 넣으면 input 이벤트가 나지 않아
+     실시간 콤마(§7-4)가 걸리지 않는다 — 붙여넣기·CSV 로 들어온 금액만
+     콤마 없이 남아 보였다. 저장은 금액칸_값() 이 콤마를 걷어내므로 무관하다 */
+  el.value = el.classList.contains('금액칸') ? 금액칸_표시(값) : 값;
 }
 
 
