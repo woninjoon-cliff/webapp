@@ -51,6 +51,116 @@ var MIG_병원ID대상 = [
  * 마이그레이션 전체 실행.
  * @return {Object} 처리 결과 요약
  */
+// =====================================================================
+// 회원권 도입 마이그레이션 (2026-08-21)
+//
+//   1) 15_회원권 시트 생성 (없을 때만)
+//   2) 05_시술에 '회원권ID' 컬럼 추가 — '시술구분' 바로 뒤 (22열 → 23열)
+//
+// 재실행 안전: 이미 반영된 항목은 건너뛴다.
+// 편집기에서 MIG_회원권도입() 을 직접 실행하고 Logger 를 확인할 것.
+// =====================================================================
+
+function MIG_회원권도입() {
+
+  var 결과 = [];
+
+  // ---- 1) 15_회원권 시트 ----
+  try {
+
+    var ss = SpreadsheetApp.openById(MIG_SS_ID);
+    var 회원권시트 = ss.getSheetByName('15_회원권');
+
+    if (회원권시트) {
+      결과.push('[건너뜀] 15_회원권 시트가 이미 있습니다.');
+    } else {
+
+      회원권시트 = ss.insertSheet('15_회원권');
+
+      회원권시트
+        .getRange(1, 1, 1, MEMB_헤더.length)
+        .setValues([MEMB_헤더]);
+
+      회원권시트.setFrozenRows(1);
+      MIG_헤더서식_(회원권시트, MEMB_헤더.length);
+
+      결과.push('[반영] 15_회원권 시트 생성 (' + MEMB_헤더.length + '열)');
+    }
+
+  } catch (e) {
+    결과.push('[실패] 15_회원권: ' + e.message);
+  }
+
+  // ---- 2) 05_시술 회원권ID 컬럼 ----
+  try {
+
+    var 시술시트 = MIG_시트열기_('05_시술');
+    var 헤더 = MIG_헤더읽기_(시술시트);
+
+    if (헤더.indexOf('회원권ID') !== -1) {
+      결과.push('[건너뜀] 05_시술: 회원권ID 컬럼이 이미 존재 (' + 헤더.length + '열)');
+    } else {
+
+      var 위치 = 헤더.indexOf('시술구분');
+
+      if (위치 === -1) {
+        결과.push('[실패] 05_시술: 시술구분 컬럼을 찾을 수 없습니다.');
+      } else {
+
+        // 시술구분 바로 뒤에 삽입 (1-based 이므로 위치+1 뒤 = 위치+2)
+        시술시트.insertColumnAfter(위치 + 1);
+        시술시트.getRange(1, 위치 + 2).setValue('회원권ID');
+
+        MIG_헤더서식_(시술시트, 시술시트.getLastColumn());
+
+        결과.push('[반영] 05_시술: 회원권ID 컬럼 추가 (' +
+          시술시트.getLastColumn() + '열). 기존 행은 공란');
+      }
+    }
+
+  } catch (e2) {
+    결과.push('[실패] 05_시술: ' + e2.message);
+  }
+
+  Logger.log('===== 회원권 도입 마이그레이션 =====');
+  결과.forEach(function (m) { Logger.log('  ' + m); });
+
+  return 결과;
+}
+
+
+// 반영 결과 확인 (읽기 전용)
+function test_MIG_회원권검증() {
+
+  var 통과 = [], 실패 = [];
+
+  try {
+    var 회원권헤더 = MIG_헤더읽기_(MIG_시트열기_('15_회원권'));
+    if (MIG_헤더동일_(회원권헤더, MEMB_헤더)) {
+      통과.push('15_회원권 헤더 일치 (' + 회원권헤더.length + '열)');
+    } else {
+      실패.push('15_회원권 헤더 불일치: ' + 회원권헤더.join(','));
+    }
+  } catch (e) { 실패.push('15_회원권: ' + e.message); }
+
+  try {
+    var 시술헤더 = MIG_헤더읽기_(MIG_시트열기_('05_시술'));
+    if (MIG_헤더동일_(시술헤더, PROC_새헤더)) {
+      통과.push('05_시술 헤더 일치 (' + 시술헤더.length + '열)');
+    } else {
+      실패.push('05_시술 헤더 불일치: ' + 시술헤더.join(','));
+    }
+  } catch (e2) { 실패.push('05_시술: ' + e2.message); }
+
+  Logger.log('===== 회원권 도입 검증 =====');
+  Logger.log('통과 ' + 통과.length + ' / 실패 ' + 실패.length);
+  통과.forEach(function (m) { Logger.log('  [OK] ' + m); });
+  실패.forEach(function (m) { Logger.log('  [NG] ' + m); });
+
+  return { 통과: 통과, 실패: 실패 };
+}
+
+
 function MIG_전체실행() {
   var 결과 = { 성공: [], 건너뜀: [], 실패: [] };
 

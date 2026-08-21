@@ -32,6 +32,8 @@ var PROC_새헤더 = [
   '환자명',
   '시술일',
   '시술구분',
+  // 시술구분이 '회원권' 일 때만 채워진다. 15_회원권의 회원권ID (2026-08-21 추가)
+  '회원권ID',
   '시술명',
   '용량',
   '단위',
@@ -543,6 +545,7 @@ function PROC_getList(token, 조건) {
         환자명: row['환자명'],
         시술일: PROC_날짜문자열_(row['시술일']),
         시술구분: row['시술구분'],
+        회원권ID: String(row['회원권ID'] || ''),
         시술명: row['시술명'],
         용량: row['용량'] === undefined ? '' : String(row['용량']),
         단위: row['단위'] === undefined ? '' : String(row['단위']),
@@ -607,6 +610,12 @@ function PROC_saveBatch(token, 공통, 행목록) {
 
   // 단위는 프론트 입력을 받되 기준정보와 다르면 저장을 막는다 (2026-08-21)
   var 단위맵 = PROC_단위맵_(session.병원ID);
+
+  // 회원권 검증 컨텍스트. 구분이 '회원권'일 때만 쓴다.
+  // 같은 배치에서 한 회원권을 여러 행이 쓰면 누적 잔액으로 검사한다
+  var 회원권ctx = 시술구분 === '회원권'
+    ? MEMB_검증컨텍스트_(session.병원ID)
+    : null;
 
   // 내원경로 / 세부 / 방문유형 검증 컨텍스트 (필수 + 목록 강제 + 종속)
   var 내원ctx = PROC_내원컨텍스트_(session.병원ID);
@@ -681,9 +690,28 @@ function PROC_saveBatch(token, 공통, 행목록) {
       return;
     }
 
+    // 회원권 차감 검증 (구분이 회원권일 때만). 금액 정규화 후에 해야
+    // 잔액 비교가 정확하다
+    var 회원권ID = String(행.회원권ID || '').trim();
+
+    if (회원권ctx) {
+
+      var 회원권오류 = MEMB_사용오류_(회원권ctx, 회원권ID, 환자번호, 금액);
+
+      if (회원권오류) {
+        오류들.push((i + 1) + '번 행: ' + 회원권오류);
+        return;
+      }
+
+    } else {
+      // 회원권 구분이 아니면 회원권ID를 저장하지 않는다
+      회원권ID = '';
+    }
+
     유효행.push({
       환자번호: 환자번호,
       환자명: String(행.환자명 || '').trim(),
+      회원권ID: 회원권ID,
       시술명: 시술명,
       용량: String(행.용량 === undefined || 행.용량 === null ? '' : 행.용량).trim(),
       단위: String(행.단위 || '').trim(),
@@ -721,6 +749,7 @@ function PROC_saveBatch(token, 공통, 행목록) {
       환자명: 행.환자명,
       시술일: 시술일,
       시술구분: 시술구분,
+      회원권ID: 행.회원권ID,
       시술명: 행.시술명,
       용량: 행.용량,
       단위: 행.단위,
@@ -833,7 +862,36 @@ function PROC_update(token, data) {
     throw new Error(단위오류);
   }
 
+  // 회원권 차감 재검증.
+  // 시술구분은 수정 대상이 아니므로 기존 행의 구분을 기준으로 판단한다.
+  // data.회원권ID 가 오지 않으면 기존 회원권을 그대로 쓴다
+  var 새금액 = PROC_금액정규화_(data.시술금액);
+  var 회원권ID = '';
+
+  if (String(기존['시술구분']) === '회원권') {
+
+    회원권ID = String(
+      data.회원권ID !== undefined && data.회원권ID !== null
+        ? data.회원권ID
+        : (기존['회원권ID'] || '')
+    ).trim();
+
+    // 취소 상태였다면 현재 차감하고 있는 금액이 0이다
+    var 기존금액 = String(기존['상태']) === PROC_상태_취소
+      ? 0
+      : (Number(기존['시술금액']) || 0);
+
+    var 회원권오류 = MEMB_수정오류_(
+      session.병원ID, 회원권ID, 환자번호, 새금액, 기존금액
+    );
+
+    if (회원권오류) {
+      throw new Error(회원권오류);
+    }
+  }
+
   DB_updateById('시술', '시술ID', 시술ID, {
+    회원권ID: 회원권ID,
     환자번호: 환자번호,
     환자명: String(data.환자명 || '').trim(),
     시술일: 시술일,
