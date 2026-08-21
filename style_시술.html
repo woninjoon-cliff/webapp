@@ -502,6 +502,20 @@
   outline: 1px solid #8064d8;
 }
 
+/* 서버가 값을 정하는 칸 — 고쳐도 반영되지 않음을 눈으로 알린다
+   (다회차 시술의 시술금액. 회차 금액은 PROC_update 가 기존 값을 유지한다) */
+.시술폼필드 input.읽기전용 {
+  background: #f6f4fb;
+  color: #8b849d;
+  cursor: not-allowed;
+}
+
+.시술폼안내 {
+  font-size: 11px;
+  color: #8b849d;
+  line-height: 1.4;
+}
+
 .시술폼하단 {
   display: flex;
   justify-content: flex-end;

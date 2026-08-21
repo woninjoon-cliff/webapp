@@ -932,6 +932,9 @@ function 시술_내역화면() {
         <div class="시술폼필드">
           <label>시술금액</label>
           <input type="text" class="금액칸" id="시술수정_시술금액">
+          <div class="시술폼안내 숨김" id="시술수정_금액안내">
+            다회차는 회차 금액을 서버가 정합니다. 여기서 바꿔도 반영되지 않습니다.
+          </div>
         </div>
 
         <div class="시술폼필드">
@@ -1651,6 +1654,17 @@ function 시술_수정폼열기(시술ID) {
   document.getElementById('시술수정_용량').value = r.용량;
   document.getElementById('시술수정_단위').value = r.단위;
   document.getElementById('시술수정_시술금액').value = 금액칸_표시(r.시술금액);
+
+  /* ★ 다회차는 회차 금액을 서버가 정한다 (마지막 회차 나머지 보정 때문).
+     PROC_update 가 프론트 금액을 무시하고 기존 금액을 유지하므로,
+     열어두면 고쳐도 조용히 반영되지 않아 사용자가 오해한다 → 잠근다 */
+  const 금액el = document.getElementById('시술수정_시술금액');
+  const 금액안내 = document.getElementById('시술수정_금액안내');
+  const 다회차임 = (r.시술구분 === '다회차');
+
+  금액el.readOnly = 다회차임;
+  금액el.classList.toggle('읽기전용', 다회차임);
+  금액안내.classList.toggle('숨김', !다회차임);
   document.getElementById('시술수정_패키지여부').value = r.패키지여부 === 'Y' ? 'Y' : '';
   document.getElementById('시술수정_비고').value = r.비고;
 
@@ -1961,12 +1975,20 @@ function 시술_행추가() {
       el = document.createElement('select');
       el.innerHTML = '<option value="">해당없음</option><option value="Y">패키지</option>';
 
-    } else if (시술_셀형태[c] === '멤버십') {
+    } else if (시술_셀형태[c] === '차감권') {
 
-      // 멤버십(13)은 기준정보가 아니라 15_멤버십에서 온다.
-      // 환자번호를 입력해야 목록이 채워지므로 처음에는 안내만 둔다
+      /* 차감권(13)은 기준정보가 아니라 15_멤버십 / 16_다회차에서 온다.
+         환자번호를 입력해야 목록이 채워지므로 처음에는 안내만 둔다.
+         ★ 여기 비교값은 반드시 시술_셀형태[13] 과 같아야 한다.
+           안 맞으면 아래 기준정보 분기로 떨어져 시술_기준목록['차감권'] 이
+           undefined 라 .map() 에서 터지고 행 추가가 통째로 죽는다 */
       el = document.createElement('select');
-      el.innerHTML = 시술_차감권옵션HTML('', '', '');
+
+      const 구분el0 = document.getElementById('시술등록_구분');
+      const 구분0 = 구분el0 ? 구분el0.value : '';
+
+      el.innerHTML = 시술_차감권옵션HTML(구분0, '', '');
+      el.disabled = (구분0 !== '멤버십' && 구분0 !== '다회차');
 
     } else if (시술_셀형태[c]) {
 
