@@ -70,7 +70,12 @@ function 다회차_화면() {
 
         <div class="필드">
           <label>시술명 <span class="필수">*</span></label>
-          <select id="다회차_시술명" style="width:180px"></select>
+          <!-- datalist: 타이핑 검색 + 드롭다운 (2026-08-21 사용자 요청).
+               목록 강제는 유지 — 저장 시 프론트가 거르고 서버(MULT_add/update)가 재검증한다 -->
+          <input type="text" id="다회차_시술명" list="다회차_시술명목록"
+                 style="width:180px" placeholder="타이핑으로 검색"
+                 autocomplete="off">
+          <datalist id="다회차_시술명목록"></datalist>
         </div>
 
         <div class="필드">
@@ -177,10 +182,13 @@ function 다회차_초기화() {
   다회차_수정중ID = null;
   document.getElementById('다회차_결제일').value = 시술_오늘문자열();
 
-  /* 시술명 드롭다운은 기준정보에서 (시술 등록과 같은 목록 강제) */
+  /* 시술명은 기준정보에서 (시술 등록과 같은 목록 강제).
+     datalist 라 타이핑 검색이 되고, 목록 밖 값은 저장에서 차단된다 */
   시술_기준목록불러오기(function() {
-    document.getElementById('다회차_시술명').innerHTML =
-      시술_옵션HTML('시술명', '시술명 선택');
+    document.getElementById('다회차_시술명목록').innerHTML =
+      시술_기준목록['시술명'].map(function(v) {
+        return '<option value="' + 다회차_escape(v) + '">';
+      }).join('');
   });
 
   다회차_불러오기();
@@ -377,7 +385,9 @@ function 다회차_수정폼열기(다회차ID) {
   document.getElementById('다회차_수정ID').value = 다회차ID;
   document.getElementById('다회차_환자번호').value = m.환자번호;
   document.getElementById('다회차_환자명').value = m.환자명;
-  시술_셀렉트값설정(document.getElementById('다회차_시술명'), m.시술명);
+  /* input+datalist 라 값을 직접 넣는다. 목록에서 빠진 옛 값이어도 표시는 되고,
+     저장하려 하면 아래 목록 검증이 차단한다 (구 select 의 "(목록없음)" 과 같은 보호) */
+  document.getElementById('다회차_시술명').value = m.시술명;
   document.getElementById('다회차_총회수').value = m.총회수;
   document.getElementById('다회차_총액').value = 금액칸_표시(m.총액);
   document.getElementById('다회차_결제일').value = m.결제일;
@@ -403,7 +413,7 @@ function 다회차_저장() {
   const data = {
     환자번호: document.getElementById('다회차_환자번호').value.trim(),
     환자명: document.getElementById('다회차_환자명').value.trim(),
-    시술명: document.getElementById('다회차_시술명').value,
+    시술명: document.getElementById('다회차_시술명').value.trim(),
     총회수: document.getElementById('다회차_총회수').value,
     총액: 금액칸_값(document.getElementById('다회차_총액')),
     결제일: document.getElementById('다회차_결제일').value,
@@ -413,6 +423,13 @@ function 다회차_저장() {
 
   if (!data.환자번호 || !data.시술명 || !data.총회수 || !data.총액 || !data.결제일) {
     다회차_상태표시('환자번호·시술명·총회수·총액·결제일은 모두 입력해야 합니다.', true);
+    return;
+  }
+
+  /* 시술명 목록 강제 — datalist 는 자유 입력이 가능하므로 여기서 거른다 (서버도 재검증) */
+  if ((시술_기준목록['시술명'] || []).indexOf(data.시술명) === -1) {
+    다회차_상태표시(
+      '시술명 "' + data.시술명 + '" 은(는) 기준정보 목록에 없습니다. 목록에서 골라주세요.', true);
     return;
   }
 
