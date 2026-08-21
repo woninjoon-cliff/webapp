@@ -419,6 +419,7 @@ function PROC_getSummary(token) {
 
   var 결과 = {
     금일건수: 0,
+    금일매출: 0,
     당월건수: 0,
     당월매출: 0,
     당월구분별: { 일반: 0, 회원권: 0, 체험단무료: 0, 다회차: 0 },
@@ -436,6 +437,7 @@ function PROC_getSummary(token) {
 
     if (일자 === 오늘) {
       결과.금일건수++;
+      결과.금일매출 += Number(row['시술금액']) || 0;
     }
 
     if (일자.substring(0, 7) === 당월) {

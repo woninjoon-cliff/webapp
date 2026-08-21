@@ -538,6 +538,8 @@
       content.innerHTML =
         대시보드화면();
 
+      대시보드_불러오기();
+
       return;
 
     }
@@ -675,12 +677,12 @@
             오늘 시술
           </div>
 
-          <div class="카드숫자">
+          <div class="카드숫자" id="대시_금일건수">
             -
           </div>
 
-          <div class="카드설명">
-            시술 관리에서 확인
+          <div class="카드설명" id="대시_오늘날짜">
+            불러오는 중...
           </div>
 
         </div>
@@ -689,15 +691,15 @@
         <div class="카드">
 
           <div class="카드라벨">
-            현재 재고 품목
+            오늘 매출
           </div>
 
-          <div class="카드숫자">
+          <div class="카드숫자" id="대시_금일매출">
             -
           </div>
 
           <div class="카드설명">
-            재고 관리에서 확인
+            시술금액 합계 (취소 제외)
           </div>
 
         </div>
@@ -706,15 +708,15 @@
         <div class="카드">
 
           <div class="카드라벨">
-            진행 중 발주
+            당월 시술
           </div>
 
-          <div class="카드숫자">
+          <div class="카드숫자" id="대시_당월건수">
             -
           </div>
 
-          <div class="카드설명">
-            구매 관리에서 확인
+          <div class="카드설명" id="대시_당월">
+            &nbsp;
           </div>
 
         </div>
@@ -723,15 +725,32 @@
         <div class="카드">
 
           <div class="카드라벨">
-            재고 부족 품목
+            당월 매출
           </div>
 
-          <div class="카드숫자">
+          <div class="카드숫자" id="대시_당월매출">
             -
           </div>
 
           <div class="카드설명">
-            재고 관리에서 확인
+            시술금액 합계 (취소 제외)
+          </div>
+
+        </div>
+
+
+        <div class="카드">
+
+          <div class="카드라벨">
+            재고 · 구매
+          </div>
+
+          <div class="카드숫자 미연결">
+            준비 중
+          </div>
+
+          <div class="카드설명">
+            재고·발주 기능 구현 후 연결
           </div>
 
         </div>
@@ -910,6 +929,60 @@
 
     }
   );
+
+
+  /* ================================================================
+     대시보드 집계 (2026-08-21 연결)
+
+     PROC_getSummary 한 번으로 4개 카드를 채운다.
+     집계 규칙(취소 제외 등)을 서버가 갖고 있어 시술 메인·병원 관리와 숫자가 일치한다.
+     재고·구매 카드는 도메인 자체가 미구현이라 '준비 중' 으로 남겨 둔다
+     ================================================================ */
+
+  function 대시보드_불러오기() {
+
+    const set = function(id, 값) {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = 값; }
+    };
+
+    const 금액 = function(n) {
+      return (Number(n) || 0).toLocaleString('ko-KR') + '원';
+    };
+
+    const d = new Date();
+    const 오늘 =
+      d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+      ('0' + d.getDate()).slice(-2);
+
+    set('대시_오늘날짜', 오늘);
+    set('대시_당월', 오늘.substring(0, 7));
+
+    google.script.run
+
+      .withSuccessHandler(function(요약) {
+
+        if (!요약) {
+          return;
+        }
+
+        set('대시_금일건수', 요약.금일건수 + '건');
+        set('대시_금일매출', 금액(요약.금일매출));
+        set('대시_당월건수', 요약.당월건수 + '건');
+        set('대시_당월매출', 금액(요약.당월매출));
+      })
+
+      .withFailureHandler(function(error) {
+
+        ['대시_금일건수', '대시_금일매출', '대시_당월건수', '대시_당월매출']
+          .forEach(function(id) { set(id, '조회 실패'); });
+
+        console.error('대시보드 요약 조회 실패', error);
+      })
+
+      .PROC_getSummary(현재세션.token);
+  }
 
 
   /* ================================================================
