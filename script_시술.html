@@ -1968,18 +1968,22 @@ function 시술_등록화면() {
 
       <div class="시술입력표영역">
         <table class="시술입력표">
+          <!-- ★ 열 수는 번호(1) + 시술_입력열(14) + 삭제(1) = 16.
+               행 생성(시술_행추가)과 함께 움직인다 — 입력열을 바꾸면 여기도 함께 고칠 것.
+               2026-08-21: 차감권 열이 여기서 빠져 마지막 칸이 찌그러져 보이던 것 수정 -->
           <colgroup>
             <col style="width:40px"><col style="width:95px"><col style="width:85px">
             <col style="width:95px"><col style="width:95px"><col style="width:165px">
             <col style="width:58px"><col style="width:58px"><col style="width:92px">
             <col><col style="width:92px"><col style="width:85px">
-            <col style="width:95px"><col style="width:85px"><col style="width:55px">
+            <col style="width:95px"><col style="width:85px"><col style="width:170px">
+            <col style="width:55px">
           </colgroup>
           <thead>
             <tr>
               <th>No</th><th>환자번호</th><th>환자명</th><th>담당실장</th><th>담당원장</th>
               <th>시술명</th><th>용량</th><th>단위</th><th>시술금액</th><th>비고</th>
-              <th>패키지여부</th><th>내원경로</th><th>세부</th><th>방문유형</th><th></th>
+              <th>패키지여부</th><th>내원경로</th><th>세부</th><th>방문유형</th><th>차감권</th><th></th>
             </tr>
           </thead>
           <tbody id="시술입력표본문"></tbody>
@@ -2014,22 +2018,28 @@ function 시술_등록초기화() {
   상태.className = '시술상태 성공';
   상태.textContent = '기준정보 목록 불러오는 중...';
 
-  시술_기준목록불러오기(function() {
+  /* 기준정보·멤버십·다회차 세 호출은 서로 독립이라 병렬로 쏜다 (2026-08-21).
+     직렬(기준→멤버십→다회차)이던 것을 바꿔 진입 로딩을 왕복 1회 수준으로 줄였다.
+     입력표 렌더만 셋 다 끝난 뒤에 한다 (행의 차감권 select 를 채워야 하므로) */
+  let 남은로딩 = 3;
 
-    // 멤버십 목록까지 받은 뒤에 입력표를 만든다 (행의 멤버십 select 를 채워야 함)
-    // 멤버십·다회차 목록까지 받은 뒤에 입력표를 만든다
-    // (행의 차감권 select 를 채워야 하므로)
-    시술_멤버십목록불러오기(function() {
+  const 하나끝 = function() {
 
-      시술_다회차목록불러오기(function() {
+    남은로딩--;
 
-        상태.className = '시술상태';
-        상태.textContent = '';
+    if (남은로딩 > 0) {
+      return;
+    }
 
-        시술_입력표비우기();
-      });
-    });
-  });
+    상태.className = '시술상태';
+    상태.textContent = '';
+
+    시술_입력표비우기();
+  };
+
+  시술_기준목록불러오기(하나끝);
+  시술_멤버십목록불러오기(하나끝);
+  시술_다회차목록불러오기(하나끝);
 }
 
 
