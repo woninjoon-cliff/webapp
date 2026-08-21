@@ -54,7 +54,9 @@ const 시술_입력열 = ['환자번호', '환자명', '담당실장', '담당�
 /* 열 인덱스 → 셀 형태. select 칸은 기준정보 구분명 또는 '패키지' */
 const 시술_셀형태 = { 2: '담당실장', 3: '담당원장', 4: '시술명', 9: '패키지', 10: '내원경로', 11: '세부', 12: '방문유형' };
 
-const 시술_구분목록 = ['일반', '회원권', '체험단무료', '다회차'];
+/* 시술구분. 서버 PROC_시술구분목록 과 값이 정확히 일치해야 한다.
+   '체험단/무료' 는 '/' 를 포함하므로 객체 키로 쓸 때 반드시 따옴표를 붙일 것 */
+const 시술_구분목록 = ['일반', '회원권', '체험단/무료', '다회차'];
 
 
 /* ================================================================
@@ -543,7 +545,7 @@ function 시술_요약불러오기() {
       const 구분매출 = 요약.당월구분별매출 || {};
 
       document.getElementById('시술요약_구분').innerHTML =
-        ['일반', '회원권', '체험단무료', '다회차'].map(function(g) {
+        ['일반', '회원권', '체험단/무료', '다회차'].map(function(g) {
           return 시술_escape(g) + ' ' + (요약.당월구분별[g] || 0) + '건 · ' +
             시술_금액표시(구분매출[g] || 0) + '원';
         }).join('<br>');
@@ -697,7 +699,7 @@ function 시술_내역화면() {
           <option value="">전체</option>
           <option value="일반">일반</option>
           <option value="회원권">회원권</option>
-          <option value="체험단무료">체험단무료</option>
+          <option value="체험단/무료">체험단/무료</option>
           <option value="다회차">다회차</option>
         </select>
       </div>
@@ -1681,7 +1683,7 @@ function 시술_등록화면() {
           <select id="시술등록_구분">
             <option value="일반">일반</option>
             <option value="회원권">회원권</option>
-            <option value="체험단무료">체험단무료</option>
+            <option value="체험단/무료">체험단/무료</option>
             <option value="다회차">다회차</option>
           </select>
         </div>
