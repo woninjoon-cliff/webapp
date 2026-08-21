@@ -120,6 +120,127 @@
   color: #8b849d;
 }
 
+/* ---------------- 금일 시술 상세 팝업 (백로그 ①) ---------------- */
+
+.시술금일행 {
+  cursor: pointer;
+}
+
+.시술덮개 {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 32, 70, .35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+
+.시술덮개.숨김 { display: none !important; }
+
+.시술상세카드 {
+  background: #fff;
+  border-radius: 10px;
+  width: 620px;
+  max-width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.시술상세머리 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid #eeeaf5;
+}
+
+.시술상세머리 h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #40385f;
+  margin-bottom: 4px;
+}
+
+.시술상세머리 .부제 {
+  font-size: 12px;
+  color: #8b849d;
+}
+
+.시술상세닫기 {
+  border: none;
+  background: none;
+  font-size: 20px;
+  color: #8b849d;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.시술상세본문 {
+  padding: 12px 18px 14px;
+  overflow: auto;
+  flex: 1;
+}
+
+.시술상세표 {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.시술상세표 thead th {
+  background: #f6f2fe;
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #40385f;
+  border-right: 1px solid #ddd7ee;
+  white-space: nowrap;
+}
+
+.시술상세표 tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1edf9;
+  border-right: 1px solid #ddd7ee;
+  color: #40385f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.시술상세표 thead th:last-child,
+.시술상세표 tbody td:last-child {
+  border-right: none;
+}
+
+.시술상세표 .우 { text-align: right; }
+
+.시술상세비고 {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #665f78;
+}
+
+.시술상세발 {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 13px 18px;
+  border-top: 1px solid #eeeaf5;
+}
+
+.시술상세발 .설명 {
+  margin-right: auto;
+  font-size: 12px;
+  color: #8b849d;
+}
+
+
 /* 컬럼 표시/숨김 칩 (백로그 ④) */
 .시술컬럼설정 {
   display: flex;

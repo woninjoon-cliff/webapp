@@ -33,6 +33,10 @@ let 시술_시술명메타 = {};
    메타가 없는 세부 값은 모든 내원경로에서 표시한다 */
 let 시술_세부경로 = {};
 
+/* 금일 시술 등록묶음 맵 (키 "등록묶음ID|환자번호" → { 키, 행들 }).
+   메인 금일 시술 상세 팝업(백로그 ①)이 참조한다 */
+let 시술_금일묶음 = {};
+
 /* 입력표 열 순서(고정) — 앞 10열은 원가표(비올라셀_신규 원가표) 열 순서와
    동일하고, 내원경로/세부/방문유형 3열은 맨 끝에 붙인다
    (원가표 행 붙여넣기 매핑을 바꾸지 않기 위함. 이 3개는 수기 선택)
@@ -394,9 +398,27 @@ function 시술_메인화면() {
       </div>
 
       <div class="시술도구안내" style="margin-top:10px; margin-bottom:0;">
-        등록 묶음(환자별) 단위로 표시합니다. 개별 시술의 조회·수정·취소는 시술 내역 메뉴에서 진행합니다.
+        행을 클릭하면 개별 시술 목록을 볼 수 있습니다. 수정·취소는 시술 내역 메뉴에서 진행합니다.
       </div>
 
+    </div>
+
+    <!-- 금일 시술 상세 팝업 (백로그 ①) -->
+    <div class="시술덮개 숨김" id="시술금일상세덮개" onclick="시술_금일상세덮개클릭(event)">
+      <div class="시술상세카드">
+        <div class="시술상세머리">
+          <div>
+            <h3><span id="시술금일상세제목">시술 상세</span></h3>
+            <div class="부제" id="시술금일상세부제"></div>
+          </div>
+          <button class="시술상세닫기" onclick="시술_금일상세닫기()">&times;</button>
+        </div>
+        <div class="시술상세본문" id="시술금일상세본문"></div>
+        <div class="시술상세발">
+          <span class="설명" id="시술금일상세합계"></span>
+          <button class="버튼 버튼보조" onclick="시술_금일상세닫기()">닫기</button>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -494,11 +516,14 @@ function 시술_금일불러오기() {
       목록.forEach(function(r) {
         const 키 = r.등록묶음ID + '|' + r.환자번호;
         if (!맵[키]) {
-          맵[키] = { 행들: [] };
+          맵[키] = { 키: 키, 행들: [] };
           묶음들.push(맵[키]);
         }
         맵[키].행들.push(r);
       });
+
+      /* 상세 팝업(백로그 ①)이 키로 찾아 쓴다 */
+      시술_금일묶음 = 맵;
 
       if (상태) {
         /* 취소 건은 PROC_getList 가 이미 제외한다 (취소포함 미전달 → 기본 제외) */
@@ -525,7 +550,8 @@ function 시술_금일불러오기() {
         let 합계 = 0;
         m.행들.forEach(function(r) { 합계 += Number(r.시술금액) || 0; });
 
-        return '<tr>' +
+        return '<tr class="시술금일행" onclick="시술_금일상세열기(\'' +
+            시술_escape(m.키) + '\')" title="클릭하면 개별 시술 목록">' +
           '<td>' + 시술_escape(첫.환자번호) + '</td>' +
           '<td>' + 시술_escape(첫.환자명) + '</td>' +
           '<td>' + 시술_escape(첫.시술구분) + '</td>' +
@@ -927,6 +953,102 @@ function 시술_정렬(키) {
   /* 머리를 다시 그리면 정렬표시(▲▼)도 함께 갱신된다.
      핸들이 사라지므로 리사이즈 재부착이 필요해 전체 렌더를 쓴다 */
   시술_내역표전체렌더();
+}
+
+
+/* ================================================================
+   금일 시술 상세 팝업 (백로그 ①)
+
+   메인 금일 시술은 등록묶음(환자) 단위 1행이라 개별 시술이 안 보인다.
+   행을 클릭하면 그 묶음의 시술 목록을 팝업으로 펼친다.
+   ★ 읽기 전용이다. 수정·취소는 시술 내역 메뉴에서만 한다 (동선 중복 방지)
+   ================================================================ */
+
+function 시술_금일상세열기(키) {
+
+  const 묶음 = 시술_금일묶음[키];
+
+  if (!묶음 || !묶음.행들.length) {
+    return;
+  }
+
+  const 행들 = 묶음.행들;
+  const 첫 = 행들[0];
+
+  document.getElementById('시술금일상세제목').textContent =
+    첫.환자명 + ' (' + 첫.환자번호 + ')';
+
+  document.getElementById('시술금일상세부제').textContent =
+    첫.시술일 + ' · ' + 첫.시술구분 +
+    ' · ' + (첫.내원경로 || '-') + ' / ' + (첫.세부 || '-') + ' / ' + (첫.방문유형 || '-');
+
+  let 합계 = 0;
+  행들.forEach(function(r) { 합계 += Number(r.시술금액) || 0; });
+
+  document.getElementById('시술금일상세본문').innerHTML =
+    '<table class="시술상세표">' +
+      '<thead><tr>' +
+        '<th>시술명</th><th>용량</th><th>단위</th>' +
+        '<th class="우">금액</th><th>담당실장</th><th>담당원장</th>' +
+      '</tr></thead>' +
+      '<tbody>' +
+        행들.map(function(r) {
+          return '<tr>' +
+            '<td title="' + 시술_escape(r.시술명) + '">' + 시술_escape(r.시술명) + '</td>' +
+            '<td>' + 시술_escape(r.용량) + '</td>' +
+            '<td>' + 시술_escape(r.단위) + '</td>' +
+            '<td class="우">' + 시술_금액표시(r.시술금액) + '</td>' +
+            '<td>' + 시술_escape(r.담당실장) + '</td>' +
+            '<td>' + 시술_escape(r.담당원장) + '</td>' +
+          '</tr>';
+        }).join('') +
+      '</tbody>' +
+    '</table>' +
+    (첫.비고 ? '<div class="시술상세비고">비고: ' + 시술_escape(첫.비고) + '</div>' : '');
+
+  document.getElementById('시술금일상세합계').textContent =
+    '시술 ' + 행들.length + '건 · 합계 ' + 시술_금액표시(합계) + '원';
+
+  document.getElementById('시술금일상세덮개').classList.remove('숨김');
+}
+
+
+function 시술_금일상세닫기() {
+
+  const 덮개 = document.getElementById('시술금일상세덮개');
+
+  if (덮개) {
+    덮개.classList.add('숨김');
+  }
+}
+
+
+function 시술_금일상세덮개클릭(e) {
+
+  if (e && e.target && e.target.id === '시술금일상세덮개') {
+    시술_금일상세닫기();
+  }
+}
+
+
+/* ESC 로 닫기. 문서 전역 리스너를 한 번만 등록한다
+   (페이지 이동으로 화면이 다시 그려져도 중복 등록되지 않게) */
+if (!window.시술_상세ESC등록) {
+
+  window.시술_상세ESC등록 = true;
+
+  document.addEventListener('keydown', function(e) {
+
+    if (e.key !== 'Escape') {
+      return;
+    }
+
+    const 덮개 = document.getElementById('시술금일상세덮개');
+
+    if (덮개 && !덮개.classList.contains('숨김')) {
+      시술_금일상세닫기();
+    }
+  });
 }
 
 
