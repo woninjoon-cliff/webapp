@@ -44,6 +44,10 @@ function DB_초기화() {
       '수정일시'
     ],
 
+    // 10열. 재고관리 = TRUE/FALSE (2026-08-21 품목 마스터 보강).
+    // FALSE = 발주·입고·미지급까지만 하고 재고는 세지 않는 품목 (주사기·장갑 등).
+    // ★ 맨 끝에 붙인 이유: ITEM_getList/save 가 열 인덱스로 읽어서
+    //   중간에 넣으면 전부 밀린다. 다음 컬럼도 반드시 맨 끝에 붙일 것
     '03_품목': [
       '품목ID',
       '병원ID',
@@ -53,7 +57,8 @@ function DB_초기화() {
       '규격',
       '사용여부',
       '등록일시',
-      '수정일시'
+      '수정일시',
+      '재고관리'
     ],
 
     // 16열. 정본 = Vendor.gs VENDOR_헤더 / Migrate.gs MIG_거래처헤더
@@ -378,7 +383,7 @@ function ITEM_getList(token) {
   }
 
   const values = sheet
-    .getRange(2, 1, lastRow - 1, 9)
+    .getRange(2, 1, lastRow - 1, 10)
     .getValues();
 
   return values
@@ -405,6 +410,10 @@ function ITEM_getList(token) {
         규격: String(row[5] || ''),
         사용여부: row[6] === true ||
                  String(row[6]).toLowerCase() !== 'false',
+
+        // 빈 값(마이그레이션 전 기존 행)은 TRUE 로 해석 — 기존 품목은 전부 재고 대상
+        재고관리: row[9] === true ||
+                 String(row[9]).toLowerCase() !== 'false',
 
         등록일시: row[7]
           ? Utilities.formatDate(
@@ -466,6 +475,13 @@ function ITEM_save(token, data) {
   const 사용여부 =
     data.사용여부 === false ||
     String(data.사용여부).toLowerCase() === 'false'
+      ? false
+      : true;
+
+  // FALSE = 발주만 하고 재고는 세지 않는 품목. 기본은 TRUE
+  const 재고관리 =
+    data.재고관리 === false ||
+    String(data.재고관리).toLowerCase() === 'false'
       ? false
       : true;
 
@@ -552,10 +568,10 @@ function ITEM_save(token, data) {
     }
 
 
-    // 컬럼 순서: 품목ID / 병원ID / 분류 / 품목명 / 단위 / 규격 / 사용여부 / 등록일시 / 수정일시
-    // 품목ID(1열)·병원ID(2열) 유지, 3열(분류)~9열(수정일시) 갱신
+    // 컬럼 순서: 품목ID / 병원ID / 분류 / 품목명 / 단위 / 규격 / 사용여부 / 등록일시 / 수정일시 / 재고관리
+    // 품목ID(1열)·병원ID(2열) 유지, 3열(분류)~10열(재고관리) 갱신
     sheet
-      .getRange(targetRow, 3, 1, 7)
+      .getRange(targetRow, 3, 1, 8)
       .setValues([[
         분류,
         품목명,
@@ -563,7 +579,8 @@ function ITEM_save(token, data) {
         규격,
         사용여부,
         rows[targetRow - 2][7] || now,
-        now
+        now,
+        재고관리
       ]]);
 
 
@@ -619,7 +636,7 @@ function ITEM_save(token, data) {
   const 품목ID = ITEM_새ID생성_();
 
 
-  // 컬럼 순서: 품목ID / 병원ID / 분류 / 품목명 / 단위 / 규격 / 사용여부 / 등록일시 / 수정일시
+  // 컬럼 순서: 품목ID / 병원ID / 분류 / 품목명 / 단위 / 규격 / 사용여부 / 등록일시 / 수정일시 / 재고관리
   sheet.appendRow([
     품목ID,
     세션병원ID,
@@ -629,7 +646,8 @@ function ITEM_save(token, data) {
     규격,
     사용여부,
     now,
-    now
+    now,
+    재고관리
   ]);
 
 
@@ -913,6 +931,9 @@ const ITEM_기본병원ID_ = 'H003';
 
 function ITEM_시트재구성() {
 
+  // ★ 재고관리 컬럼 도입(2026-08-21) 반영은 이 함수를 편집기에서 1회 실행하면 된다.
+  //   헤더명 기반 이관이라 기존 시트에 없는 컬럼은 기본값(재고관리=TRUE)으로 채워지고,
+  //   이미 새 구조면 아무것도 하지 않는다 (중복 실행 안전)
   const 새헤더 = [
     '품목ID',
     '병원ID',
@@ -922,7 +943,8 @@ function ITEM_시트재구성() {
     '규격',
     '사용여부',
     '등록일시',
-    '수정일시'
+    '수정일시',
+    '재고관리'
   ];
 
   const ss =
@@ -1008,7 +1030,8 @@ function ITEM_시트재구성() {
         가져오기('규격'),
         가져오기('사용여부', true),
         가져오기('등록일시'),
-        가져오기('수정일시')
+        가져오기('수정일시'),
+        가져오기('재고관리', true)
       ]);
 
     });

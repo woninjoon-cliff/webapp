@@ -95,7 +95,7 @@
 
           <div class="품목폼필드">
             <label>분류</label>
-            <input id="품목_분류" type="text" placeholder="분류 (예: 필러, 주사제, 소모품)">
+            <input id="품목_분류" type="text" placeholder="분류 (예: 필러, 의약품, 의료소모품)">
           </div>
 
           <div class="품목폼필드">
@@ -110,7 +110,8 @@
 
           <div class="품목폼필드">
             <label>규격</label>
-            <input id="품목_규격" type="text" placeholder="규격 (예: 2CC, 10CC, 100U)">
+            <!-- 발주 단위↔사용 단위 환산: "숫자+사용단위/발주단위". 비우면 1:1 (2026-08-21 확정) -->
+            <input id="품목_규격" type="text" placeholder="예: 100ea/box (비우면 1:1)">
           </div>
 
           <div class="품목폼필드">
@@ -118,6 +119,14 @@
             <div class="품목폼체크">
               <input id="품목_사용여부" type="checkbox" checked>
               <span>사용</span>
+            </div>
+          </div>
+
+          <div class="품목폼필드">
+            <label>재고관리</label>
+            <div class="품목폼체크">
+              <input id="품목_재고관리" type="checkbox" checked>
+              <span>재고 관리 (해제 시 발주·미지급만)</span>
             </div>
           </div>
 
@@ -161,6 +170,7 @@
             <col data-key="품목명">
             <col data-key="단위">
             <col data-key="규격">
+            <col data-key="재고관리">
             <col data-key="사용여부">
             <col data-key="관리">
           </colgroup>
@@ -172,14 +182,15 @@
               <th><span class="th_텍스트" onclick="품목_정렬토글('품목명')">품목명<span class="정렬표시" data-key="품목명">&#8645;</span></span><span class="리사이즈핸들" data-col="2"></span></th>
               <th><span class="th_텍스트" onclick="품목_정렬토글('단위')">단위<span class="정렬표시" data-key="단위">&#8645;</span></span><span class="리사이즈핸들" data-col="3"></span></th>
               <th><span class="th_텍스트" onclick="품목_정렬토글('규격')">규격<span class="정렬표시" data-key="규격">&#8645;</span></span><span class="리사이즈핸들" data-col="4"></span></th>
-              <th class="가운데"><span class="th_텍스트" onclick="품목_정렬토글('사용여부')">사용여부<span class="정렬표시" data-key="사용여부">&#8645;</span></span><span class="리사이즈핸들" data-col="5"></span></th>
+              <th class="가운데"><span class="th_텍스트" onclick="품목_정렬토글('재고관리')">재고관리<span class="정렬표시" data-key="재고관리">&#8645;</span></span><span class="리사이즈핸들" data-col="5"></span></th>
+              <th class="가운데"><span class="th_텍스트" onclick="품목_정렬토글('사용여부')">사용여부<span class="정렬표시" data-key="사용여부">&#8645;</span></span><span class="리사이즈핸들" data-col="6"></span></th>
               <th class="가운데"><span class="th_텍스트" style="cursor:default">관리</span></th>
             </tr>
           </thead>
 
           <tbody id="품목표본문">
             <tr>
-              <td colspan="7">
+              <td colspan="8">
                 <div class="품목안내">
                   불러오는 중입니다...
                 </div>
@@ -209,7 +220,7 @@
 
     if (tbody) {
       tbody.innerHTML =
-        '<tr><td colspan="7"><div class="품목안내">불러오는 중입니다...</div></td></tr>';
+        '<tr><td colspan="8"><div class="품목안내">불러오는 중입니다...</div></td></tr>';
     }
 
 
@@ -240,7 +251,7 @@
 
           if (tb) {
             tb.innerHTML =
-              '<tr><td colspan="7"><div class="품목안내">불러오기에 실패했습니다.</div></td></tr>';
+              '<tr><td colspan="8"><div class="품목안내">불러오기에 실패했습니다.</div></td></tr>';
           }
 
         }
@@ -364,7 +375,7 @@
     if (!list || list.length === 0) {
 
       tbody.innerHTML =
-        '<tr><td colspan="7"><div class="품목안내">표시할 품목이 없습니다.</div></td></tr>';
+        '<tr><td colspan="8"><div class="품목안내">표시할 품목이 없습니다.</div></td></tr>';
 
       품목_정렬표시갱신();
       return;
@@ -384,6 +395,9 @@
           String(item.품목ID || '');
 
 
+        const 재고 =
+          품목_사용여부불린(item.재고관리);
+
         return `
           <tr>
             <td>${품목_escape(품목ID)}</td>
@@ -391,6 +405,7 @@
             <td>${품목_escape(item.품목명)}</td>
             <td>${품목_escape(item.단위)}</td>
             <td>${품목_escape(item.규격)}</td>
+            <td class="가운데">${재고 ? '재고' : '<span class="미사용텍스트">발주만</span>'}</td>
             <td class="가운데">${사용 ? '사용' : '<span class="미사용텍스트">미사용</span>'}</td>
             <td class="가운데">
               <span
@@ -447,8 +462,8 @@
       const va = a[필드];
       const vb = b[필드];
 
-      // 사용여부는 불린 정렬 (false < true)
-      if (필드 === '사용여부') {
+      // 사용여부·재고관리는 불린 정렬 (false < true)
+      if (필드 === '사용여부' || 필드 === '재고관리') {
         const na = (va === true || String(va).toLowerCase() !== 'false') ? 1 : 0;
         const nb = (vb === true || String(vb).toLowerCase() !== 'false') ? 1 : 0;
         return (na - nb) * 부호;
@@ -505,6 +520,7 @@
     document.getElementById('품목_단위').value = '';
     document.getElementById('품목_규격').value = '';
     document.getElementById('품목_사용여부').checked = true;
+    document.getElementById('품목_재고관리').checked = true;
 
     품목_상태표시('', '');
 
@@ -542,6 +558,8 @@
     document.getElementById('품목_규격').value = String(item.규격 || '');
     document.getElementById('품목_사용여부').checked =
       품목_사용여부불린(item.사용여부);
+    document.getElementById('품목_재고관리').checked =
+      품목_사용여부불린(item.재고관리);
 
     품목_상태표시('', '');
 
@@ -587,6 +605,9 @@
     const 사용여부 =
       document.getElementById('품목_사용여부').checked;
 
+    const 재고관리 =
+      document.getElementById('품목_재고관리').checked;
+
 
     if (!품목명) {
       품목_상태표시('품목명을 입력해주세요.', '오류');
@@ -600,7 +621,8 @@
       품목명: 품목명,
       단위: 단위,
       규격: 규격,
-      사용여부: 사용여부
+      사용여부: 사용여부,
+      재고관리: 재고관리
     };
 
     if (품목ID) {
