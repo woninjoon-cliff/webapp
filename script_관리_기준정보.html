@@ -21,9 +21,13 @@ let 기준정보_편집중ID = null;
 const 기준정보_구분설정 = {
   시술명: {
     카드제목: '시술명 목록',
-    안내: '시술 등록 화면의 시술명 드롭다운 목록입니다. 여기에 없는 시술명은 등록이 차단됩니다. 비고의 분류·종류·단위는 추후 원가 기준에서 활용됩니다.',
+    안내: '시술 등록 화면의 시술명 드롭다운 목록입니다. 여기에 없는 시술명은 등록이 차단됩니다. 분류·단위는 시술 등록·내역에 자동으로 채워지고, 종류는 추후 원가 기준에서 활용됩니다.',
     입력예시: '예: 리쥬란 힐러',
-    비고표시: true
+    메타: [
+      { 키: '분류', 이름: '분류', 너비: '130px', 예시: '예: 리쥬란' },
+      { 키: '종류', 이름: '종류', 너비: '110px', 예시: '예: 스킨부스터' },
+      { 키: '단위', 이름: '단위', 너비: '80px',  예시: '예: cc' }
+    ]
   },
   담당실장: {
     카드제목: '담당실장 목록',
@@ -42,10 +46,11 @@ const 기준정보_구분설정 = {
   },
   세부: {
     카드제목: '세부 채널 목록',
-    안내: '시술 등록 화면의 세부(유입 채널) 드롭다운 목록입니다(필수 항목). 비고의 "경로=국내" / "경로=해외" / "경로=국내,직원" 메타로 내원경로에 종속됩니다. 비고가 비면 모든 내원경로에서 표시되고 종속 검증이 생략됩니다.',
+    안내: '시술 등록 화면의 세부(유입 채널) 드롭다운 목록입니다(필수 항목). 허용 내원경로를 지정하면 시술 등록에서 그 경로를 골랐을 때만 이 항목이 나타납니다. 비워두면 모든 내원경로에서 표시되고 종속 검증이 생략됩니다.',
     입력예시: '예: 강남언니',
-    비고표시: true,
-    비고입력예시: '예: 경로=국내'
+    메타: [
+      { 키: '경로', 이름: '허용 내원경로', 너비: '160px', 예시: '예: 국내 (둘 이상이면 국내,직원)' }
+    ]
   },
   방문유형: {
     카드제목: '방문유형 목록',
@@ -53,6 +58,73 @@ const 기준정보_구분설정 = {
     입력예시: '예: 초진'
   }
 };
+
+
+/* ================================================================
+   비고 메타 파싱 / 조립
+
+   14_기준정보의 비고는 구분마다 다른 메타를 담는 만능 칸이다.
+     시술명 → "분류=리쥬란; 종류=스킨부스터; 단위=cc"
+     세부   → "경로=국내"  /  "경로=국내,직원"
+   저장 형식은 그대로 두고(서버 PROC_분류맵_ · PROC_세부경로맵_ 가 이 형식을
+   그대로 읽는다), 화면에서만 키별 컬럼·입력칸으로 분해한다.
+   → 사용자는 "분류=" 같은 형식을 직접 칠 일이 없다 (2026-08-21)
+   ================================================================ */
+
+function 기준정보_메타파싱(비고) {
+
+
+  const 결과 = {};
+  const s = String(비고 || '');
+
+  s.split(';').forEach(function(조각) {
+
+    const i = 조각.indexOf('=');
+
+    if (i === -1) {
+      return;
+    }
+
+    const 키 = 조각.slice(0, i).trim();
+    const 값 = 조각.slice(i + 1).trim();
+
+    if (키) {
+      결과[키] = 값;
+    }
+  });
+
+  return 결과;
+}
+
+
+/* 메타 정의 순서대로 "키=값; 키=값" 문자열을 만든다. 빈 값은 뺀다.
+   메타에 없는 기존 키(과거에 다른 이름으로 들어간 것)는 뒤에 보존한다 */
+function 기준정보_메타조립(메타정의, 값들, 원본비고) {
+
+  const 조각들 = [];
+  const 사용한키 = {};
+
+  (메타정의 || []).forEach(function(m) {
+
+    사용한키[m.키] = true;
+
+    const v = String(값들[m.키] || '').trim();
+
+    if (v !== '') {
+      조각들.push(m.키 + '=' + v);
+    }
+  });
+
+  const 기존 = 기준정보_메타파싱(원본비고);
+
+  Object.keys(기존).forEach(function(k) {
+    if (!사용한키[k] && String(기존[k]).trim() !== '') {
+      조각들.push(k + '=' + 기존[k]);
+    }
+  });
+
+  return 조각들.join('; ');
+}
 
 
 function 기준정보_escape(value) {
@@ -72,7 +144,7 @@ function 기준정보_escape(value) {
 function 기준정보_화면(구분) {
 
   const 설정 = 기준정보_구분설정[구분];
-  const 비고표시 = !!설정.비고표시;
+  const 메타 = 설정.메타 || [];
 
   return `
     <div class="기준정보카드">
@@ -85,12 +157,13 @@ function 기준정보_화면(구분) {
           <label>새 항목</label>
           <input type="text" id="기준정보_새값" placeholder="` + 기준정보_escape(설정.입력예시) + `">
         </div>
-        ` + (설정.비고입력예시
-          ? `<div class="필드">
-          <label>비고</label>
-          <input type="text" id="기준정보_새비고" placeholder="` + 기준정보_escape(설정.비고입력예시) + `">
-        </div>`
-          : '') + `
+        ` + 메타.map(function(m) {
+            return '<div class="필드">' +
+              '<label>' + 기준정보_escape(m.이름) + '</label>' +
+              '<input type="text" id="기준정보_새메타_' + 기준정보_escape(m.키) + '"' +
+              ' placeholder="' + 기준정보_escape(m.예시 || '') + '">' +
+            '</div>';
+          }).join('') + `
         <button class="버튼 버튼주요" onclick="기준정보_추가()">추가</button>
         <button class="버튼 버튼보조" onclick="기준정보_불러오기()">새로고침</button>
         <div class="필드" style="margin-left:auto;">
@@ -102,17 +175,26 @@ function 기준정보_화면(구분) {
       <div class="기준정보표영역">
         <table class="기준정보표">
           <colgroup>
-            ` + (비고표시
-              ? '<col data-key="기준ID" style="width:90px"><col data-key="값"><col data-key="비고" style="width:230px"><col data-key="사용여부" style="width:80px"><col data-key="관리" style="width:150px">'
-              : '<col data-key="기준ID" style="width:90px"><col data-key="값"><col data-key="사용여부" style="width:80px"><col data-key="관리" style="width:150px">') + `
+            <col data-key="기준ID" style="width:90px">
+            <col data-key="값">
+            ` + 메타.map(function(m) {
+                return '<col data-key="' + 기준정보_escape(m.키) +
+                  '" style="width:' + m.너비 + '">';
+              }).join('') + `
+            <col data-key="사용여부" style="width:80px">
+            <col data-key="관리" style="width:150px">
           </colgroup>
           <thead>
             <tr>
-              <th>기준ID</th><th>값</th>` + (비고표시 ? '<th>비고</th>' : '') + `<th>사용여부</th><th>관리</th>
+              <th>기준ID</th><th>값</th>` +
+              메타.map(function(m) {
+                return '<th>' + 기준정보_escape(m.이름) + '</th>';
+              }).join('') +
+              `<th>사용여부</th><th>관리</th>
             </tr>
           </thead>
           <tbody id="기준정보표본문">
-            <tr><td colspan="` + (비고표시 ? 5 : 4) + `"><div class="기준정보안내">불러오는 중...</div></td></tr>
+            <tr><td colspan="` + (4 + 메타.length) + `"><div class="기준정보안내">불러오는 중...</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -182,8 +264,8 @@ function 기준정보_표렌더() {
   }
 
   const 현재설정 = 기준정보_구분설정[기준정보_현재구분] || {};
-  const 비고표시 = !!현재설정.비고표시;
-  const 열수 = 비고표시 ? 5 : 4;
+  const 메타 = 현재설정.메타 || [];
+  const 열수 = 4 + 메타.length;
 
   const 목록 = 기준정보_전체목록.filter(function(r) {
     return r.구분 === 기준정보_현재구분;
@@ -208,10 +290,27 @@ function 기준정보_표렌더() {
       ? '<input type="text" id="기준정보편집_' + 기준정보_escape(r.기준ID) + '" value="' + 기준정보_escape(r.값) + '">'
       : 기준정보_escape(r.값);
 
+    /* 비고 문자열을 키별로 분해해 각 컬럼에 넣는다 */
+    const 메타값 = 기준정보_메타파싱(r.비고);
+
+    const 메타칸들 = 메타.map(function(m) {
+
+      const v = 메타값[m.키] || '';
+
+      const 내용 = 편집중
+        ? '<input type="text" id="기준정보편집메타_' + 기준정보_escape(r.기준ID) + '_' +
+          기준정보_escape(m.키) + '" value="' + 기준정보_escape(v) + '">'
+        : (v === ''
+            ? '<span class="기준정보빈값">-</span>'
+            : 기준정보_escape(v));
+
+      return '<td title="' + 기준정보_escape(v) + '">' + 내용 + '</td>';
+    }).join('');
+
     const 관리칸 = 편집중
-      ? '<span class="기준정보링크" onclick="기준정보_이름변경저장(\'' + 기준정보_escape(r.기준ID) + '\')">저장</span>' +
+      ? '<span class="기준정보링크" onclick="기준정보_수정저장(\'' + 기준정보_escape(r.기준ID) + '\')">저장</span>' +
         '<span class="기준정보링크" onclick="기준정보_편집취소()">취소</span>'
-      : '<span class="기준정보링크" onclick="기준정보_편집시작(\'' + 기준정보_escape(r.기준ID) + '\')">이름변경</span>' +
+      : '<span class="기준정보링크" onclick="기준정보_편집시작(\'' + 기준정보_escape(r.기준ID) + '\')">수정</span>' +
         (r.사용여부
           ? '<span class="기준정보링크" onclick="기준정보_사용여부(\'' + 기준정보_escape(r.기준ID) + '\', false)">사용중지</span>'
           : '<span class="기준정보링크" onclick="기준정보_사용여부(\'' + 기준정보_escape(r.기준ID) + '\', true)">사용재개</span>');
@@ -219,7 +318,7 @@ function 기준정보_표렌더() {
     return '<tr>' +
       '<td>' + 기준정보_escape(r.기준ID) + '</td>' +
       '<td title="' + 기준정보_escape(r.값) + '">' + 값칸 + '</td>' +
-      (비고표시 ? '<td title="' + 기준정보_escape(r.비고) + '">' + 기준정보_escape(r.비고) + '</td>' : '') +
+      메타칸들 +
       '<td>' + (r.사용여부 ? '사용' : '<span class="기준정보중지텍스트">중지</span>') + '</td>' +
       '<td>' + 관리칸 + '</td>' +
     '</tr>';
@@ -263,15 +362,26 @@ function 기준정보_추가() {
     return;
   }
 
-  const 비고input = document.getElementById('기준정보_새비고');
-  const 비고 = 비고input ? 비고input.value.trim() : '';
+  const 설정 = 기준정보_구분설정[기준정보_현재구분] || {};
+  const 메타 = 설정.메타 || [];
 
-  /* 세부는 비고의 경로= 메타로 내원경로에 종속된다. 없이 추가하면 전 경로 표시 + 종속 검증 생략 */
-  if (기준정보_현재구분 === '세부' && 비고.indexOf('경로=') === -1) {
+  /* 메타 입력칸을 모아 "키=값; 키=값" 문자열로 조립한다 */
+  const 메타값 = {};
+  const 메타inputs = [];
+
+  메타.forEach(function(m) {
+    const el = document.getElementById('기준정보_새메타_' + m.키);
+    메타inputs.push(el);
+    메타값[m.키] = el ? el.value.trim() : '';
+  });
+
+  const 비고 = 기준정보_메타조립(메타, 메타값, '');
+
+  /* 세부는 경로 메타로 내원경로에 종속된다. 비우면 전 경로 표시 + 종속 검증 생략 */
+  if (기준정보_현재구분 === '세부' && !메타값['경로']) {
     const 계속 = confirm(
-      '비고에 "경로=국내" 같은 메타가 없습니다.\n' +
-      '이대로 추가하면 모든 내원경로에서 표시되고 경로 종속 검증이 생략됩니다.\n' +
-      '계속할까요?'
+      '허용 내원경로를 비워두면 모든 내원경로에서 이 항목이 표시되고\n' +
+      '경로 종속 검증이 생략됩니다.\n\n계속할까요?'
     );
     if (!계속) return;
   }
@@ -281,7 +391,7 @@ function 기준정보_추가() {
     .withSuccessHandler(function(결과) {
 
       input.value = '';
-      if (비고input) 비고input.value = '';
+      메타inputs.forEach(function(el) { if (el) el.value = ''; });
       기준정보_상태표시('"' + 결과.값 + '" 추가됨. 시술 등록 드롭다운에 바로 반영됩니다.');
       기준정보_불러오기();
     })
@@ -312,7 +422,7 @@ function 기준정보_편집취소() {
 }
 
 
-function 기준정보_이름변경저장(기준ID) {
+function 기준정보_수정저장(기준ID) {
 
   const input = document.getElementById('기준정보편집_' + 기준ID);
   const 새값 = input ? input.value.trim() : '';
@@ -322,12 +432,28 @@ function 기준정보_이름변경저장(기준ID) {
     return;
   }
 
+  const 설정 = 기준정보_구분설정[기준정보_현재구분] || {};
+  const 메타 = 설정.메타 || [];
+
+  const 원본 = 기준정보_전체목록.filter(function(r) {
+    return r.기준ID === 기준ID;
+  })[0];
+
+  const 메타값 = {};
+
+  메타.forEach(function(m) {
+    const el = document.getElementById('기준정보편집메타_' + 기준ID + '_' + m.키);
+    메타값[m.키] = el ? el.value.trim() : '';
+  });
+
+  const 비고 = 기준정보_메타조립(메타, 메타값, 원본 ? 원본.비고 : '');
+
   google.script.run
 
     .withSuccessHandler(function() {
 
       기준정보_편집중ID = null;
-      기준정보_상태표시('이름이 변경되었습니다. 과거 시술 기록의 표기는 바뀌지 않습니다.');
+      기준정보_상태표시('수정되었습니다. 과거 시술 기록의 표기는 바뀌지 않습니다.');
       기준정보_불러오기();
     })
 
@@ -335,7 +461,7 @@ function 기준정보_이름변경저장(기준ID) {
       기준정보_상태표시('변경 실패: ' + (error && error.message ? error.message : error), true);
     })
 
-    .BASE_이름변경(현재세션.token, { 기준ID: 기준ID, 값: 새값 });
+    .BASE_항목수정(현재세션.token, { 기준ID: 기준ID, 값: 새값, 비고: 비고 });
 }
 
 
