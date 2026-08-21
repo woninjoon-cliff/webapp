@@ -1,0 +1,559 @@
+<script>
+/* =====================================================================
+   script_시술_다회차.html — 다회차(N회권) 잔여 관리 프론트
+   대상 페이지: procedure_multi (시술 > 다회차 관리)
+   서버: Multi.gs (MULT_*)  /  16_다회차
+
+   ★ 멤버십과 헷갈리지 말 것
+     다회차 = 특정 시술 N회 패키지. 잔여를 **횟수**로 센다.
+              결제일에 전액이 병원 매출, 시술 매출은 회차마다 나뉜다
+     멤버십 = 선불 충전. 잔여를 **금액**으로 센다. 아무 시술에나 쓸 수 있다
+
+   - 회차 금액은 서버가 정한다 (마지막 회차 나머지 보정). 프론트가 계산하지 않는다
+   - 잔여는 서버가 05_시술에서 계산해 내려준다 (저장하지 않음)
+   - 표 컬럼 너비 조절은 표_자동리사이즈적용()이 자동으로 붙인다 (핸들 넣지 말 것)
+   ===================================================================== */
+
+
+let 다회차_원본목록 = [];
+let 다회차_수정중ID = null;
+
+
+function 다회차_escape(value) {
+
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+function 다회차_금액(n) {
+
+  return (Number(n) || 0).toLocaleString('ko-KR');
+}
+
+
+/* ================================================================
+   화면
+   ================================================================ */
+
+function 다회차_화면() {
+
+  return `
+    <div class="멤버십폼카드">
+
+      <div class="카드제목" id="다회차폼제목">다회차 등록</div>
+      <div class="카드설명">
+        <strong>특정 시술 N회권</strong>을 판매하면 여기에 등록합니다.
+        예: 쥬베룩 3회권 30만원 — 결제일에 30만원 전액이 병원 매출로 잡히고,
+        시술할 때마다 회차 금액이 시술 매출로 나뉩니다.
+        시술 등록에서 구분을 <strong>다회차</strong>로 선택하면 이 목록에서 고릅니다.
+        <br>
+        선불 충전(금액 차감)은 <strong>멤버십 관리</strong>에서 관리합니다.
+      </div>
+
+      <input type="hidden" id="다회차_수정ID">
+
+      <div class="멤버십폼줄">
+
+        <div class="필드">
+          <label>환자번호 <span class="필수">*</span></label>
+          <input type="text" id="다회차_환자번호" style="width:120px">
+        </div>
+
+        <div class="필드">
+          <label>환자명</label>
+          <input type="text" id="다회차_환자명" style="width:110px">
+        </div>
+
+        <div class="필드">
+          <label>시술명 <span class="필수">*</span></label>
+          <select id="다회차_시술명" style="width:180px"></select>
+        </div>
+
+        <div class="필드">
+          <label>총회수 <span class="필수">*</span></label>
+          <input type="number" id="다회차_총회수" min="1" step="1"
+                 style="width:80px" onchange="다회차_회차미리보기()">
+        </div>
+
+        <div class="필드">
+          <label>총액 <span class="필수">*</span></label>
+          <input type="text" class="금액칸" id="다회차_총액" placeholder="예: 300000"
+                 style="width:120px" onchange="다회차_회차미리보기()">
+        </div>
+
+        <div class="필드">
+          <label>결제일 <span class="필수">*</span></label>
+          <input type="date" id="다회차_결제일">
+        </div>
+
+        <div class="필드">
+          <label>유효기간</label>
+          <input type="date" id="다회차_유효기간">
+        </div>
+
+        <div class="필드" style="flex:1; min-width:160px">
+          <label>비고</label>
+          <input type="text" id="다회차_비고">
+        </div>
+
+      </div>
+
+      <div class="멤버십폼하단">
+        <div class="시술상태" id="다회차_상태"></div>
+        <div class="버튼들">
+          <button class="버튼 버튼보조 숨김" id="다회차_취소버튼" onclick="다회차_폼초기화()">수정 취소</button>
+          <button class="버튼 버튼주요" id="다회차_저장버튼" onclick="다회차_저장()">등록</button>
+        </div>
+      </div>
+
+    </div>
+
+
+    <div class="시술표카드">
+
+      <div class="시술표카드헤더">
+        <div class="제목">다회차 목록</div>
+        <div class="우측">
+          <label class="멤버십종료포함">
+            <input type="checkbox" id="다회차_종료포함" onchange="다회차_불러오기()">
+            종료 포함
+          </label>
+          <span id="다회차_요약"></span>
+        </div>
+      </div>
+
+      <div class="시술표영역">
+        <table class="다회차표 목록표" id="다회차표">
+          <colgroup>
+            <col data-key="다회차ID" style="width:95px">
+            <col data-key="환자번호" style="width:95px">
+            <col data-key="환자명" style="width:100px">
+            <col data-key="시술명" style="width:150px">
+            <col data-key="회차" style="width:100px">
+            <col data-key="총액" style="width:110px">
+            <col data-key="다음회차금액" style="width:110px">
+            <col data-key="잔여금액" style="width:110px">
+            <col data-key="결제일" style="width:100px">
+            <col data-key="유효기간" style="width:100px">
+            <col data-key="상태" style="width:80px">
+            <col data-key="관리" style="width:120px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>다회차ID</th><th>환자번호</th><th>환자명</th><th>시술명</th>
+              <th>회차</th><th>총액</th><th>다음 회차</th><th>잔여금액</th>
+              <th>결제일</th><th>유효기간</th><th>상태</th><th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="다회차표본문">
+            <tr><td colspan="12"><div class="시술안내">불러오는 중...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="시술도구안내" style="margin-top:10px; margin-bottom:0;">
+        행을 클릭하면 회차별 사용 내역을 볼 수 있습니다.
+        회차 금액은 서버가 정하며, 마지막 회차에서 나머지를 보정해 합계가 총액과 정확히 맞습니다.
+        시술을 취소하면 회차가 자동으로 복구됩니다.
+      </div>
+
+    </div>
+
+    ` + 시술_상세팝업HTML() + `
+  `;
+}
+
+
+/* ================================================================
+   초기화 / 조회
+   ================================================================ */
+
+function 다회차_초기화() {
+
+  다회차_수정중ID = null;
+  document.getElementById('다회차_결제일').value = 시술_오늘문자열();
+
+  /* 시술명 드롭다운은 기준정보에서 (시술 등록과 같은 목록 강제) */
+  시술_기준목록불러오기(function() {
+    document.getElementById('다회차_시술명').innerHTML =
+      시술_옵션HTML('시술명', '시술명 선택');
+  });
+
+  다회차_불러오기();
+}
+
+
+function 다회차_불러오기() {
+
+  const tbody = document.getElementById('다회차표본문');
+
+  if (!tbody) {
+    return;
+  }
+
+  const 종료포함 =
+    (document.getElementById('다회차_종료포함') || {}).checked === true;
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      다회차_원본목록 = 목록 || [];
+      다회차_표렌더();
+    })
+
+    .withFailureHandler(function(error) {
+
+      tbody.innerHTML =
+        '<tr><td colspan="12"><div class="시술안내">조회 실패</div></td></tr>';
+
+      console.error('다회차 조회 실패', error);
+      다회차_상태표시('불러오지 못했습니다: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .MULT_getList(현재세션.token, { 종료포함: 종료포함 });
+}
+
+
+function 다회차_표렌더() {
+
+  const tbody = document.getElementById('다회차표본문');
+
+  if (!tbody) {
+    return;
+  }
+
+  const 요약 = document.getElementById('다회차_요약');
+
+  if (요약) {
+
+    let 총 = 0, 잔 = 0, 잔회 = 0;
+
+    다회차_원본목록.forEach(function(m) {
+      총 += m.총액;
+      잔 += m.잔여금액;
+      잔회 += m.잔여회수;
+    });
+
+    요약.textContent =
+      다회차_원본목록.length + '건 · 총액 ' + 다회차_금액(총) +
+      '원 · 잔여 ' + 잔회 + '회 / ' + 다회차_금액(잔) + '원';
+  }
+
+  if (다회차_원본목록.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="12"><div class="시술안내">등록된 다회차가 없습니다.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = 다회차_원본목록.map(function(m) {
+
+    let 상태칸;
+
+    if (m.상태 === '종료') {
+      상태칸 = '<span class="멤버십종료">종료</span>';
+    } else if (m.만료됨) {
+      상태칸 = '<span class="멤버십만료">만료</span>';
+    } else if (m.잔여회수 <= 0) {
+      상태칸 = '<span class="멤버십소진">소진</span>';
+    } else {
+      상태칸 = '사용중';
+    }
+
+    const 소진 = m.잔여회수 <= 0;
+
+    return '<tr class="멤버십행" onclick="다회차_상세열기(\'' +
+        다회차_escape(m.다회차ID) + '\')" title="클릭하면 회차별 내역">' +
+      '<td>' + 다회차_escape(m.다회차ID) + '</td>' +
+      '<td>' + 다회차_escape(m.환자번호) + '</td>' +
+      '<td>' + 다회차_escape(m.환자명) + '</td>' +
+      '<td title="' + 다회차_escape(m.시술명) + '">' + 다회차_escape(m.시술명) + '</td>' +
+      /* 회차는 "사용/전체" 로 한눈에 */
+      '<td class="다회차회차' + (소진 ? ' 멤버십잔액없음' : '') + '">' +
+        m.사용회수 + ' / ' + m.총회수 + '회</td>' +
+      '<td class="우">' + 다회차_금액(m.총액) + '</td>' +
+      '<td class="우">' + (소진 ? '-' : 다회차_금액(m.다음회차금액)) + '</td>' +
+      '<td class="우' + (소진 ? ' 멤버십잔액없음' : '') + '">' +
+        다회차_금액(m.잔여금액) + '</td>' +
+      '<td>' + 다회차_escape(m.결제일) + '</td>' +
+      '<td>' + 다회차_escape(m.유효기간) + '</td>' +
+      '<td>' + 상태칸 + '</td>' +
+      '<td onclick="event.stopPropagation()">' +
+        '<span class="시술링크" onclick="다회차_수정폼열기(\'' +
+          다회차_escape(m.다회차ID) + '\')">수정</span>' +
+        (m.상태 === '종료'
+          ? '<span class="시술링크" onclick="다회차_상태변경(\'' +
+              다회차_escape(m.다회차ID) + '\', \'사용중\')">사용재개</span>'
+          : '<span class="시술링크" onclick="다회차_상태변경(\'' +
+              다회차_escape(m.다회차ID) + '\', \'종료\')">종료</span>') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+
+function 다회차_상태표시(문구, 오류) {
+
+  const el = document.getElementById('다회차_상태');
+
+  if (!el) {
+    return;
+  }
+
+  el.className = '시술상태 ' + (오류 ? '오류' : '성공');
+  el.textContent = 문구;
+}
+
+
+/* 총액·총회수를 입력하면 회차 금액을 미리 보여준다.
+   서버 MULT_다음회차금액_ 과 같은 규칙(내림 + 마지막 회차 나머지 보정) */
+function 다회차_회차미리보기() {
+
+  const 총액 = Number(금액칸_값(document.getElementById('다회차_총액'))) || 0;
+  const 총회수 = Number(document.getElementById('다회차_총회수').value) || 0;
+
+  if (총액 <= 0 || 총회수 < 1) {
+    return;
+  }
+
+  const 기본 = Math.floor(총액 / 총회수);
+  const 마지막 = 총액 - 기본 * (총회수 - 1);
+
+  다회차_상태표시(
+    총회수 === 1
+      ? '1회차 ' + 다회차_금액(총액) + '원'
+      : '회차당 ' + 다회차_금액(기본) + '원' +
+        (마지막 !== 기본
+          ? ' (마지막 ' + 총회수 + '회차는 ' + 다회차_금액(마지막) +
+            '원 — 나머지 보정)'
+          : '')
+  );
+}
+
+
+/* ================================================================
+   등록 / 수정
+   ================================================================ */
+
+function 다회차_폼초기화() {
+
+  다회차_수정중ID = null;
+
+  document.getElementById('다회차_수정ID').value = '';
+  document.getElementById('다회차_환자번호').value = '';
+  document.getElementById('다회차_환자명').value = '';
+  document.getElementById('다회차_시술명').value = '';
+  document.getElementById('다회차_총회수').value = '';
+  document.getElementById('다회차_총액').value = '';
+  document.getElementById('다회차_결제일').value = 시술_오늘문자열();
+  document.getElementById('다회차_유효기간').value = '';
+  document.getElementById('다회차_비고').value = '';
+
+  document.getElementById('다회차폼제목').textContent = '다회차 등록';
+  document.getElementById('다회차_저장버튼').textContent = '등록';
+  document.getElementById('다회차_취소버튼').classList.add('숨김');
+
+  다회차_상태표시('');
+}
+
+
+function 다회차_수정폼열기(다회차ID) {
+
+  const m = 다회차_원본목록.filter(function(x) {
+    return x.다회차ID === 다회차ID;
+  })[0];
+
+  if (!m) {
+    return;
+  }
+
+  다회차_수정중ID = 다회차ID;
+
+  document.getElementById('다회차_수정ID').value = 다회차ID;
+  document.getElementById('다회차_환자번호').value = m.환자번호;
+  document.getElementById('다회차_환자명').value = m.환자명;
+  시술_셀렉트값설정(document.getElementById('다회차_시술명'), m.시술명);
+  document.getElementById('다회차_총회수').value = m.총회수;
+  document.getElementById('다회차_총액').value = 금액칸_표시(m.총액);
+  document.getElementById('다회차_결제일').value = m.결제일;
+  document.getElementById('다회차_유효기간').value = m.유효기간;
+  document.getElementById('다회차_비고').value = m.비고;
+
+  document.getElementById('다회차폼제목').textContent = '다회차 수정 — ' + 다회차ID;
+  document.getElementById('다회차_저장버튼').textContent = '저장';
+  document.getElementById('다회차_취소버튼').classList.remove('숨김');
+
+  다회차_상태표시(
+    '이미 ' + m.사용회수 + '회 / ' + 다회차_금액(m.사용금액) +
+    '원을 사용했습니다. 그보다 작게 줄일 수 없습니다.'
+  );
+
+  document.querySelector('.멤버십폼카드')
+    .scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+
+function 다회차_저장() {
+
+  const data = {
+    환자번호: document.getElementById('다회차_환자번호').value.trim(),
+    환자명: document.getElementById('다회차_환자명').value.trim(),
+    시술명: document.getElementById('다회차_시술명').value,
+    총회수: document.getElementById('다회차_총회수').value,
+    총액: 금액칸_값(document.getElementById('다회차_총액')),
+    결제일: document.getElementById('다회차_결제일').value,
+    유효기간: document.getElementById('다회차_유효기간').value,
+    비고: document.getElementById('다회차_비고').value.trim()
+  };
+
+  if (!data.환자번호 || !data.시술명 || !data.총회수 || !data.총액 || !data.결제일) {
+    다회차_상태표시('환자번호·시술명·총회수·총액·결제일은 모두 입력해야 합니다.', true);
+    return;
+  }
+
+  const 수정 = !!다회차_수정중ID;
+
+  if (수정) {
+    data.다회차ID = 다회차_수정중ID;
+  }
+
+  const 성공 = function() {
+    다회차_폼초기화();
+    다회차_상태표시(수정 ? '수정되었습니다.' : '등록되었습니다.');
+    다회차_불러오기();
+  };
+
+  const 실패 = function(error) {
+    다회차_상태표시(
+      (수정 ? '수정 실패: ' : '등록 실패: ') +
+      (error && error.message ? error.message : error), true);
+  };
+
+  if (수정) {
+    google.script.run.withSuccessHandler(성공).withFailureHandler(실패)
+      .MULT_update(현재세션.token, data);
+  } else {
+    google.script.run.withSuccessHandler(성공).withFailureHandler(실패)
+      .MULT_add(현재세션.token, data);
+  }
+}
+
+
+function 다회차_상태변경(다회차ID, 상태) {
+
+  const 문구 = 상태 === '종료'
+    ? '이 다회차를 종료할까요?\n목록에서 빠지고 시술 등록에서 선택할 수 없게 됩니다.\n과거 사용 기록은 그대로 유지됩니다.'
+    : '이 다회차를 다시 사용할까요?';
+
+  if (!confirm(문구)) {
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+      다회차_상태표시(상태 === '종료' ? '종료되었습니다.' : '사용재개되었습니다.');
+      다회차_불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      다회차_상태표시('처리 실패: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .MULT_상태변경(현재세션.token, 다회차ID, 상태);
+}
+
+
+/* ================================================================
+   회차별 사용 내역 팝업 (시술 상세 팝업 재사용)
+   ================================================================ */
+
+function 다회차_상세열기(다회차ID) {
+
+  const m = 다회차_원본목록.filter(function(x) {
+    return x.다회차ID === 다회차ID;
+  })[0];
+
+  if (!m) {
+    return;
+  }
+
+  document.getElementById('시술금일상세제목').textContent =
+    m.환자명 + ' (' + m.환자번호 + ') — ' + m.시술명;
+
+  document.getElementById('시술금일상세부제').textContent =
+    '결제 ' + m.결제일 + ' · ' + m.총회수 + '회 ' + 다회차_금액(m.총액) + '원' +
+    (m.유효기간 ? ' · 유효기간 ' + m.유효기간 : '');
+
+  document.getElementById('시술금일상세합계').textContent =
+    '사용 ' + m.사용회수 + '회 / 잔여 ' + m.잔여회수 + '회 · 잔여금액 ' +
+    다회차_금액(m.잔여금액) + '원';
+
+  const 본문 = document.getElementById('시술금일상세본문');
+  본문.innerHTML = '<div class="시술안내">불러오는 중...</div>';
+
+  document.getElementById('시술금일상세덮개').classList.remove('숨김');
+
+  google.script.run
+
+    .withSuccessHandler(function(내역) {
+
+      내역 = 내역 || [];
+
+      if (내역.length === 0) {
+        본문.innerHTML =
+          '<div class="시술안내">아직 이 다회차로 진행한 시술이 없습니다.</div>';
+        return;
+      }
+
+      /* 회차 번호는 취소되지 않은 건만 센다 (취소는 차감에서 빠지므로) */
+      let 회차 = 0;
+
+      본문.innerHTML =
+        '<table class="시술상세표">' +
+          '<thead><tr>' +
+            '<th>회차</th><th>시술일</th><th>시술명</th>' +
+            '<th class="우">차감액</th><th>상태</th>' +
+          '</tr></thead>' +
+          '<tbody>' +
+            내역.map(function(r) {
+
+              const 취소됨 = r.상태 === '취소';
+
+              if (!취소됨) {
+                회차++;
+              }
+
+              return '<tr' + (취소됨 ? ' class="멤버십취소행"' : '') + '>' +
+                '<td>' + (취소됨 ? '-' : 회차 + '회차') + '</td>' +
+                '<td>' + 다회차_escape(r.시술일) + '</td>' +
+                '<td title="' + 다회차_escape(r.시술명) + '">' +
+                  다회차_escape(r.시술명) + '</td>' +
+                '<td class="우">' +
+                  (취소됨
+                    ? '<span class="시술취소텍스트">차감 없음</span>'
+                    : 다회차_금액(r.시술금액)) +
+                '</td>' +
+                '<td>' + (취소됨
+                  ? '<span class="시술취소텍스트">취소</span>'
+                  : 다회차_escape(r.상태)) + '</td>' +
+              '</tr>';
+            }).join('') +
+          '</tbody>' +
+        '</table>';
+    })
+
+    .withFailureHandler(function(error) {
+      본문.innerHTML = '<div class="시술안내">사용 내역을 불러오지 못했습니다.</div>';
+      console.error('다회차 사용내역 조회 실패', error);
+    })
+
+    .MULT_사용내역(현재세션.token, 다회차ID);
+}
+</script>

@@ -34,6 +34,8 @@ var PROC_새헤더 = [
   '시술구분',
   // 시술구분이 '멤버십' 일 때만 채워진다. 15_멤버십의 멤버십ID (2026-08-21 추가)
   '멤버십ID',
+  // 시술구분이 '다회차' 일 때만 채워진다. 16_다회차의 다회차ID (2026-08-21 추가)
+  '다회차ID',
   '시술명',
   '용량',
   '단위',
@@ -546,6 +548,7 @@ function PROC_getList(token, 조건) {
         시술일: PROC_날짜문자열_(row['시술일']),
         시술구분: row['시술구분'],
         멤버십ID: String(row['멤버십ID'] || ''),
+        다회차ID: String(row['다회차ID'] || ''),
         시술명: row['시술명'],
         용량: row['용량'] === undefined ? '' : String(row['용량']),
         단위: row['단위'] === undefined ? '' : String(row['단위']),
@@ -615,6 +618,11 @@ function PROC_saveBatch(token, 공통, 행목록) {
   // 같은 배치에서 한 멤버십을 여러 행이 쓰면 누적 잔액으로 검사한다
   var 멤버십ctx = 시술구분 === '멤버십'
     ? MEMB_검증컨텍스트_(session.병원ID)
+    : null;
+
+  /* 다회차 검증 컨텍스트. 회차 금액은 서버가 정하므로 프론트 금액을 쓰지 않는다 */
+  var 다회차ctx = 시술구분 === '다회차'
+    ? MULT_검증컨텍스트_(session.병원ID)
     : null;
 
   // 내원경로 / 세부 / 방문유형 검증 컨텍스트 (필수 + 목록 강제 + 종속)
@@ -708,10 +716,31 @@ function PROC_saveBatch(token, 공통, 행목록) {
       멤버십ID = '';
     }
 
+    /* 다회차: 회차 금액을 서버가 정한다.
+       프론트가 보낸 시술금액은 무시하고 MULT 가 계산한 값으로 덮어쓴다.
+       마지막 회차 나머지 보정 때문에 프론트가 계산하면 합계가 어긋난다 */
+    var 다회차ID = String(행.다회차ID || '').trim();
+
+    if (다회차ctx) {
+
+      var 다회차오류 = MULT_사용오류_(다회차ctx, 다회차ID, 환자번호, 시술명);
+
+      if (다회차오류) {
+        오류들.push((i + 1) + '번 행: ' + 다회차오류);
+        return;
+      }
+
+      금액 = MULT_차감금액꺼내기_(다회차ctx, 다회차ID);
+
+    } else {
+      다회차ID = '';
+    }
+
     유효행.push({
       환자번호: 환자번호,
       환자명: String(행.환자명 || '').trim(),
       멤버십ID: 멤버십ID,
+      다회차ID: 다회차ID,
       시술명: 시술명,
       용량: String(행.용량 === undefined || 행.용량 === null ? '' : 행.용량).trim(),
       단위: String(행.단위 || '').trim(),
@@ -750,6 +779,7 @@ function PROC_saveBatch(token, 공통, 행목록) {
       시술일: 시술일,
       시술구분: 시술구분,
       멤버십ID: 행.멤버십ID,
+      다회차ID: 행.다회차ID,
       시술명: 행.시술명,
       용량: 행.용량,
       단위: 행.단위,
@@ -890,15 +920,41 @@ function PROC_update(token, data) {
     }
   }
 
+  /* 다회차 수정: 회차 금액은 서버가 정하므로 프론트 금액을 쓰지 않는다.
+     횟수만 검증하고 금액은 기존 값을 유지한다 (회차 재계산은 하지 않는다 —
+     중간 회차 금액을 바꾸면 이후 회차의 나머지 보정이 전부 어긋난다) */
+  var 다회차ID = '';
+
+  if (String(기존['시술구분']) === '다회차') {
+
+    다회차ID = String(
+      data.다회차ID !== undefined && data.다회차ID !== null
+        ? data.다회차ID
+        : (기존['다회차ID'] || '')
+    ).trim();
+
+    var 다회차오류 = MULT_수정오류_(
+      session.병원ID, 다회차ID, 환자번호, 시술명,
+      String(기존['상태']) !== PROC_상태_취소
+    );
+
+    if (다회차오류) {
+      throw new Error(다회차오류);
+    }
+
+    새금액 = Number(기존['시술금액']) || 0;   // 회차 금액 고정
+  }
+
   DB_updateById('시술', '시술ID', 시술ID, {
     멤버십ID: 멤버십ID,
+    다회차ID: 다회차ID,
     환자번호: 환자번호,
     환자명: String(data.환자명 || '').trim(),
     시술일: 시술일,
     시술명: 시술명,
     용량: String(data.용량 === undefined || data.용량 === null ? '' : data.용량).trim(),
     단위: String(data.단위 || '').trim(),
-    시술금액: PROC_금액정규화_(data.시술금액),
+    시술금액: 새금액,
     담당원장: String(data.담당원장 || '').trim(),
     담당실장: String(data.담당실장 || '').trim(),
     비고: String(data.비고 || '').trim(),

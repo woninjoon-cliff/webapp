@@ -164,6 +164,68 @@ function MIG_멤버십도입() {
     결과.push('[실패] 05_시술: ' + e2.message);
   }
 
+  // ---- 3) 16_다회차 시트 ----
+  try {
+
+    var ss2 = SpreadsheetApp.openById(MIG_SS_ID);
+    var 다회차시트 = ss2.getSheetByName('16_다회차');
+
+    if (다회차시트) {
+
+      var 다현재 = MIG_헤더읽기_(다회차시트);
+
+      if (MIG_헤더동일_(다현재, MULT_헤더)) {
+        결과.push('[건너뜀] 16_다회차 헤더 일치 (' + MULT_헤더.length + '열)');
+      } else if (다회차시트.getLastRow() > 1) {
+        결과.push('[실패] 16_다회차 헤더가 다른데 데이터가 있습니다. 수동 확인 필요');
+      } else {
+        다회차시트.clear();
+        다회차시트.getRange(1, 1, 1, MULT_헤더.length).setValues([MULT_헤더]);
+        다회차시트.setFrozenRows(1);
+        MIG_헤더서식_(다회차시트, MULT_헤더.length);
+        결과.push('[반영] 16_다회차 헤더 갱신 (' + MULT_헤더.length + '열)');
+      }
+
+    } else {
+
+      다회차시트 = ss2.insertSheet('16_다회차');
+      다회차시트.getRange(1, 1, 1, MULT_헤더.length).setValues([MULT_헤더]);
+      다회차시트.setFrozenRows(1);
+      MIG_헤더서식_(다회차시트, MULT_헤더.length);
+      결과.push('[반영] 16_다회차 시트 생성 (' + MULT_헤더.length + '열)');
+    }
+
+  } catch (e3) {
+    결과.push('[실패] 16_다회차: ' + e3.message);
+  }
+
+  // ---- 4) 05_시술 다회차ID 컬럼 ----
+  try {
+
+    var 시술시트2 = MIG_시트열기_('05_시술');
+    var 헤더2 = MIG_헤더읽기_(시술시트2);
+
+    if (헤더2.indexOf('다회차ID') !== -1) {
+      결과.push('[건너뜀] 05_시술: 다회차ID 컬럼이 이미 존재 (' + 헤더2.length + '열)');
+    } else {
+
+      var 위치2 = 헤더2.indexOf('멤버십ID');
+
+      if (위치2 === -1) {
+        결과.push('[실패] 05_시술: 멤버십ID 컬럼을 찾을 수 없습니다.');
+      } else {
+        시술시트2.insertColumnAfter(위치2 + 1);
+        시술시트2.getRange(1, 위치2 + 2).setValue('다회차ID');
+        MIG_헤더서식_(시술시트2, 시술시트2.getLastColumn());
+        결과.push('[반영] 05_시술: 다회차ID 컬럼 추가 (' +
+          시술시트2.getLastColumn() + '열). 기존 행은 공란');
+      }
+    }
+
+  } catch (e4) {
+    결과.push('[실패] 05_시술 다회차ID: ' + e4.message);
+  }
+
   Logger.log('===== 멤버십 도입 마이그레이션 =====');
   결과.forEach(function (m) { Logger.log('  ' + m); });
 
@@ -184,6 +246,15 @@ function test_MIG_멤버십검증() {
       실패.push('15_멤버십 헤더 불일치: ' + 멤버십헤더.join(','));
     }
   } catch (e) { 실패.push('15_멤버십: ' + e.message); }
+
+  try {
+    var 다회차헤더 = MIG_헤더읽기_(MIG_시트열기_('16_다회차'));
+    if (MIG_헤더동일_(다회차헤더, MULT_헤더)) {
+      통과.push('16_다회차 헤더 일치 (' + 다회차헤더.length + '열)');
+    } else {
+      실패.push('16_다회차 헤더 불일치: ' + 다회차헤더.join(','));
+    }
+  } catch (e3) { 실패.push('16_다회차: ' + e3.message); }
 
   try {
     var 시술헤더 = MIG_헤더읽기_(MIG_시트열기_('05_시술'));
