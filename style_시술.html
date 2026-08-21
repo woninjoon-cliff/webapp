@@ -120,6 +120,66 @@
   color: #8b849d;
 }
 
+/* ---------------- 회원권 (다회차 관리) ---------------- */
+
+.회원권폼카드 {
+  background: #fff;
+  border: 1px solid #eeeaf5;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+
+.회원권폼줄 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.회원권폼하단 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.회원권폼하단 .버튼들 {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.회원권행 {
+  cursor: pointer;
+}
+
+.회원권종료포함 {
+  margin-right: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.회원권종료포함 input {
+  margin-right: 3px;
+  cursor: pointer;
+}
+
+/* 상태 배지 — 종료/만료/소진을 색으로 구분한다 */
+.회원권종료 { color: #8b849d; }
+.회원권만료 { color: #c2410c; font-weight: 600; }
+.회원권소진 { color: #8064d8; font-weight: 600; }
+
+.회원권잔액없음 {
+  color: #8b849d;
+}
+
+/* 취소된 시술은 차감에서 빠지므로 흐리게 */
+.회원권취소행 td {
+  color: #a9a2b8;
+}
+
+
 /* ---------------- 금일 시술 상세 팝업 (백로그 ①) ---------------- */
 
 .시술금일행 {
