@@ -1,41 +1,106 @@
 // =====================================================================
-// Membership.gs — 회원권 도메인 서버 함수 (MEMB_*)
+// Membership.gs — 멤버십 도메인 서버 함수 (MEMB_*)
 //
-// - 대상 시트: 15_회원권 (12열)
+// - 대상 시트: 15_멤버십 (12열)
 // - 채번: K000001 (전 병원 통합). 기존 접두사 H·U·P·M·S·B·V 와 겹치지 않게 K
 // - 모든 공개 함수는 첫 인자로 세션 토큰을 받는다
 // - 병원별 데이터 분리: 세션 병원ID로 필터·검증
 // - 물리 삭제 없음: 상태 = '종료' (논리 삭제)
 //
 // ★ 잔액은 저장하지 않고 매번 계산한다 (2026-08-21 확정)
-//   사용액 = 05_시술에서 회원권ID가 일치하고 상태가 '취소'가 아닌 행의 시술금액 합
+//   사용액 = 05_시술에서 멤버십ID가 일치하고 상태가 '취소'가 아닌 행의 시술금액 합
 //   잔액   = 총액 - 사용액
 //   저장해두면 시술을 취소·수정할 때마다 되돌려야 하고 한 번 어긋나면
 //   맞추기 어렵다. 계산 방식이면 시술 취소 시 잔액이 자동으로 복구된다.
 //
 // ★ 매출 인식은 기존 방침 유지 (인수인계 §4-4)
-//   회원권 = 시술 시 인식. 판매 시점은 선수금이며 매출이 아니다.
-//   따라서 15_회원권의 총액은 대시보드·병원 관리 매출 집계에 넣지 않는다.
+//   멤버십 = 시술 시 인식. 판매 시점은 선수금이며 매출이 아니다.
+//   따라서 15_멤버십의 총액은 대시보드·병원 관리 매출 집계에 넣지 않는다.
 // =====================================================================
 
 
 var MEMB_상태_사용중 = '사용중';
 var MEMB_상태_종료 = '종료';
 
+// ★ 결제액과 보너스를 나눠서 저장한다 (2026-08-21).
+//   100만원 결제 + 10% 보너스 = 110만원 사용 가능.
+//   총액 하나로 뭉치면 "얼마 결제했는지" 를 잃어버려 매출 집계에 쓸 수 없다.
+//   사용가능액 = 결제액 + 보너스 (저장하지 않고 계산)
 var MEMB_헤더 = [
-  '회원권ID',
+  '멤버십ID',
   '병원ID',
   '환자번호',
   '환자명',
-  '상품명',
+  '등급',
+  '결제액',
+  '보너스',
   '판매일',
-  '총액',
   '유효기간',
   '상태',
   '비고',
   '등록일시',
   '수정일시'
 ];
+
+
+// =====================================================================
+// 등급 (14_기준정보 구분 '멤버십등급')
+//
+// 비고 메타: "기준액=1000000; 보너스=10"
+//   기준액 = 이 등급이 되는 최소 결제액
+//   보너스 = 결제액 대비 % (10 이면 100만원 결제 시 10만원 추가)
+//
+// 관리 화면(시술 기준 관리 > 멤버십 등급)에서 등록·수정한다.
+// 금액대가 바뀌어도 코드를 고칠 필요가 없다.
+// =====================================================================
+
+function MEMB_등급목록_(병원ID) {
+
+  return DB_findWhere('기준정보', { 병원ID: 병원ID })
+    .filter(function(row) {
+
+      if (String(row['구분']) !== '멤버십등급') {
+        return false;
+      }
+
+      var 사용 = row['사용여부'];
+      return !(사용 === false || String(사용).toLowerCase() === 'false');
+    })
+    .map(function(row) {
+
+      var 비고 = String(row['비고'] || '');
+
+      var 뽑기 = function(키) {
+        var m = 비고.match(new RegExp(키 + '\\s*=\\s*([^;]*)'));
+        return m ? Number(String(m[1]).replace(/,/g, '').trim()) || 0 : 0;
+      };
+
+      return {
+        등급: String(row['값'] || '').trim(),
+        기준액: 뽑기('기준액'),
+        보너스율: 뽑기('보너스')
+      };
+    })
+    .sort(function(a, b) {
+      return b.기준액 - a.기준액;   // 높은 기준액부터
+    });
+}
+
+
+// 결제액에 해당하는 등급을 고른다. 기준액을 넘는 것 중 가장 높은 등급.
+// 해당하는 등급이 없으면 null (등급 없이도 멤버십은 만들 수 있다)
+function MEMB_등급판정_(등급목록, 결제액) {
+
+  var 금액 = Number(결제액) || 0;
+
+  for (var i = 0; i < 등급목록.length; i++) {
+    if (금액 >= 등급목록[i].기준액) {
+      return 등급목록[i];
+    }
+  }
+
+  return null;
+}
 
 
 // =====================================================================
@@ -56,12 +121,12 @@ function MEMB_세션확인_(token) {
 
 function MEMB_새ID목록_(개수) {
 
-  var rows = DB_getAll('회원권');
+  var rows = DB_getAll('멤버십');
   var max = 0;
 
   rows.forEach(function(row) {
 
-    var id = String(row['회원권ID'] || '');
+    var id = String(row['멤버십ID'] || '');
 
     if (id.charAt(0) === 'K') {
       var n = parseInt(id.substring(1), 10);
@@ -81,7 +146,7 @@ function MEMB_새ID목록_(개수) {
 }
 
 
-// 회원권ID → 사용액 (취소 제외). 05_시술을 1회만 훑는다
+// 멤버십ID → 사용액 (취소 제외). 05_시술을 1회만 훑는다
 function MEMB_사용액맵_(병원ID) {
 
   var 맵 = {};
@@ -92,7 +157,7 @@ function MEMB_사용액맵_(병원ID) {
       return;
     }
 
-    var 권ID = String(row['회원권ID'] || '').trim();
+    var 권ID = String(row['멤버십ID'] || '').trim();
 
     if (권ID === '') {
       return;
@@ -108,8 +173,10 @@ function MEMB_사용액맵_(병원ID) {
 // 시트 행 → 화면용 객체 (잔액 계산 포함)
 function MEMB_행변환_(row, 사용액맵) {
 
-  var id = String(row['회원권ID'] || '');
-  var 총액 = Number(row['총액']) || 0;
+  var id = String(row['멤버십ID'] || '');
+  var 결제액 = Number(row['결제액']) || 0;
+  var 보너스 = Number(row['보너스']) || 0;
+  var 사용가능액 = 결제액 + 보너스;
   var 사용액 = 사용액맵[id] || 0;
   var 유효기간 = PROC_날짜문자열_(row['유효기간']);
   var 상태 = String(row['상태'] || MEMB_상태_사용중);
@@ -118,19 +185,21 @@ function MEMB_행변환_(row, 사용액맵) {
   var 만료됨 = 유효기간 !== '' && 유효기간 < 오늘;
 
   return {
-    회원권ID: id,
+    멤버십ID: id,
     환자번호: String(row['환자번호'] || ''),
     환자명: String(row['환자명'] || ''),
-    상품명: String(row['상품명'] || ''),
+    등급: String(row['등급'] || ''),
+    결제액: 결제액,
+    보너스: 보너스,
+    사용가능액: 사용가능액,
     판매일: PROC_날짜문자열_(row['판매일']),
-    총액: 총액,
     사용액: 사용액,
-    잔액: 총액 - 사용액,
+    잔액: 사용가능액 - 사용액,
     유효기간: 유효기간,
     상태: 상태,
     만료됨: 만료됨,
     // 실제로 차감에 쓸 수 있는지. 화면 표시와 서버 검증이 같은 기준을 쓴다
-    사용가능: 상태 === MEMB_상태_사용중 && !만료됨 && (총액 - 사용액) > 0,
+    사용가능: 상태 === MEMB_상태_사용중 && !만료됨 && (사용가능액 - 사용액) > 0,
     비고: String(row['비고'] || '')
   };
 }
@@ -152,7 +221,7 @@ function MEMB_getList(token, 조건) {
 
   var 사용액맵 = MEMB_사용액맵_(session.병원ID);
 
-  var 목록 = DB_findWhere('회원권', { 병원ID: session.병원ID })
+  var 목록 = DB_findWhere('멤버십', { 병원ID: session.병원ID })
     .map(function(row) {
       return MEMB_행변환_(row, 사용액맵);
     })
@@ -169,14 +238,14 @@ function MEMB_getList(token, 조건) {
       return true;
     });
 
-  // 판매일 내림차순 → 회원권ID 내림차순
+  // 판매일 내림차순 → 멤버십ID 내림차순
   목록.sort(function(a, b) {
 
     if (a.판매일 !== b.판매일) {
       return a.판매일 < b.판매일 ? 1 : -1;
     }
 
-    return a.회원권ID < b.회원권ID ? 1 : -1;
+    return a.멤버십ID < b.멤버십ID ? 1 : -1;
   });
 
   return 목록;
@@ -184,7 +253,7 @@ function MEMB_getList(token, 조건) {
 
 
 // =====================================================================
-// 특정 환자의 사용 가능한 회원권 (시술 등록 드롭다운용)
+// 특정 환자의 사용 가능한 멤버십 (시술 등록 드롭다운용)
 // =====================================================================
 
 function MEMB_사용가능목록(token, 환자번호) {
@@ -199,7 +268,7 @@ function MEMB_사용가능목록(token, 환자번호) {
 
   var 사용액맵 = MEMB_사용액맵_(session.병원ID);
 
-  return DB_findWhere('회원권', { 병원ID: session.병원ID, 환자번호: 번호 })
+  return DB_findWhere('멤버십', { 병원ID: session.병원ID, 환자번호: 번호 })
     .map(function(row) {
       return MEMB_행변환_(row, 사용액맵);
     })
@@ -210,14 +279,14 @@ function MEMB_사용가능목록(token, 환자번호) {
 
 
 // =====================================================================
-// 사용 내역 (상세 팝업용) — 이 회원권으로 차감된 시술 목록
+// 사용 내역 (상세 팝업용) — 이 멤버십으로 차감된 시술 목록
 // =====================================================================
 
-function MEMB_사용내역(token, 회원권ID) {
+function MEMB_사용내역(token, 멤버십ID) {
 
   var session = MEMB_세션확인_(token);
 
-  var id = String(회원권ID || '').trim();
+  var id = String(멤버십ID || '').trim();
 
   if (id === '') {
     return [];
@@ -225,7 +294,7 @@ function MEMB_사용내역(token, 회원권ID) {
 
   return DB_findWhere('시술', { 병원ID: session.병원ID })
     .filter(function(row) {
-      return String(row['회원권ID'] || '').trim() === id;
+      return String(row['멤버십ID'] || '').trim() === id;
     })
     .map(function(row) {
       return {
@@ -260,24 +329,19 @@ function MEMB_add(token, data) {
   data = data || {};
 
   var 환자번호 = String(data.환자번호 || '').trim();
-  var 상품명 = String(data.상품명 || '').trim();
   var 판매일 = PROC_날짜문자열_(data.판매일 || '');
-  var 총액 = PROC_금액정규화_(data.총액);
+  var 결제액 = PROC_금액정규화_(data.결제액);
 
   if (환자번호 === '') {
     throw new Error('환자번호를 입력해주세요.');
-  }
-
-  if (상품명 === '') {
-    throw new Error('상품명을 입력해주세요.');
   }
 
   if (판매일 === '') {
     throw new Error('판매일을 입력해주세요.');
   }
 
-  if (총액 <= 0) {
-    throw new Error('총액은 0보다 커야 합니다.');
+  if (결제액 <= 0) {
+    throw new Error('결제액은 0보다 커야 합니다.');
   }
 
   var 유효기간 = PROC_날짜문자열_(data.유효기간 || '');
@@ -286,16 +350,32 @@ function MEMB_add(token, data) {
     throw new Error('유효기간이 판매일보다 빠릅니다.');
   }
 
+  /* 등급·보너스: 값이 넘어오면 그대로 쓰고(예외 처리 가능),
+     없으면 기준정보 등급표에서 결제액으로 자동 판정한다 */
+  var 등급 = String(data.등급 || '').trim();
+  var 보너스;
+
+  if (data.보너스 !== undefined && data.보너스 !== null && data.보너스 !== '') {
+    보너스 = PROC_금액정규화_(data.보너스);
+  } else {
+    var 판정 = MEMB_등급판정_(MEMB_등급목록_(session.병원ID), 결제액);
+    보너스 = 판정 ? Math.round(결제액 * 판정.보너스율 / 100) : 0;
+    if (등급 === '' && 판정) {
+      등급 = 판정.등급;
+    }
+  }
+
   var 지금 = new Date();
 
-  DB_insertMany('회원권', [{
-    회원권ID: MEMB_새ID목록_(1)[0],
+  DB_insertMany('멤버십', [{
+    멤버십ID: MEMB_새ID목록_(1)[0],
     병원ID: session.병원ID,
     환자번호: 환자번호,
     환자명: String(data.환자명 || '').trim(),
-    상품명: 상품명,
+    등급: 등급,
+    결제액: 결제액,
+    보너스: 보너스,
     판매일: 판매일,
-    총액: 총액,
     유효기간: 유효기간,
     상태: MEMB_상태_사용중,
     비고: String(data.비고 || '').trim(),
@@ -303,7 +383,7 @@ function MEMB_add(token, data) {
     수정일시: 지금
   }]);
 
-  return { success: true, 환자번호: 환자번호, 상품명: 상품명 };
+  return { success: true, 환자번호: 환자번호, 등급: 등급, 보너스: 보너스 };
 }
 
 
@@ -318,40 +398,42 @@ function MEMB_update(token, data) {
 
   data = data || {};
 
-  var id = String(data.회원권ID || '').trim();
+  var id = String(data.멤버십ID || '').trim();
 
   if (id === '') {
-    throw new Error('회원권ID가 없습니다.');
+    throw new Error('멤버십ID가 없습니다.');
   }
 
-  var 기존 = DB_findById('회원권', '회원권ID', id);
+  var 기존 = DB_findById('멤버십', '멤버십ID', id);
 
   if (!기존) {
-    throw new Error('회원권을 찾을 수 없습니다: ' + id);
+    throw new Error('멤버십을 찾을 수 없습니다: ' + id);
   }
 
   if (String(기존['병원ID']) !== String(session.병원ID)) {
-    throw new Error('다른 병원의 회원권은 수정할 수 없습니다.');
+    throw new Error('다른 병원의 멤버십은 수정할 수 없습니다.');
   }
 
-  var 상품명 = String(data.상품명 || '').trim();
   var 판매일 = PROC_날짜문자열_(data.판매일 || '');
-  var 총액 = PROC_금액정규화_(data.총액);
-
-  if (상품명 === '') {
-    throw new Error('상품명을 입력해주세요.');
-  }
+  var 결제액 = PROC_금액정규화_(data.결제액);
+  var 보너스 = PROC_금액정규화_(data.보너스);
 
   if (판매일 === '') {
     throw new Error('판매일을 입력해주세요.');
   }
 
-  var 사용액 = MEMB_사용액맵_(session.병원ID)[id] || 0;
+  if (결제액 <= 0) {
+    throw new Error('결제액은 0보다 커야 합니다.');
+  }
 
-  if (총액 < 사용액) {
+  var 사용액 = MEMB_사용액맵_(session.병원ID)[id] || 0;
+  var 사용가능액 = 결제액 + 보너스;
+
+  if (사용가능액 < 사용액) {
     throw new Error(
-      '총액을 이미 사용한 금액보다 작게 줄일 수 없습니다. ' +
-      '사용액 ' + 사용액.toLocaleString('ko-KR') + '원'
+      '사용가능액(결제액+보너스)을 이미 사용한 금액보다 작게 줄일 수 없습니다. ' +
+      '사용액 ' + 사용액.toLocaleString('ko-KR') + '원 / ' +
+      '입력한 사용가능액 ' + 사용가능액.toLocaleString('ko-KR') + '원'
     );
   }
 
@@ -361,11 +443,12 @@ function MEMB_update(token, data) {
     throw new Error('유효기간이 판매일보다 빠릅니다.');
   }
 
-  DB_updateById('회원권', '회원권ID', id, {
+  DB_updateById('멤버십', '멤버십ID', id, {
     환자명: String(data.환자명 || '').trim(),
-    상품명: 상품명,
+    등급: String(data.등급 || '').trim(),
+    결제액: 결제액,
+    보너스: 보너스,
     판매일: 판매일,
-    총액: 총액,
     유효기간: 유효기간,
     비고: String(data.비고 || '').trim(),
     수정일시: new Date()
@@ -376,31 +459,59 @@ function MEMB_update(token, data) {
 
 
 // =====================================================================
-// 상태 변경 (사용중 ↔ 종료). 물리 삭제 대신 쓴다
+// 등급 미리보기 (프론트에서 결제액 입력 시 호출)
+// 결제액을 넣으면 해당 등급과 보너스 금액을 돌려준다.
+// 등급표가 비어 있으면 등급 '' / 보너스 0
 // =====================================================================
 
-function MEMB_상태변경(token, 회원권ID, 상태) {
+function MEMB_등급미리보기(token, 결제액) {
 
   var session = MEMB_세션확인_(token);
 
-  var id = String(회원권ID || '').trim();
+  var 금액 = PROC_금액정규화_(결제액);
+  var 판정 = MEMB_등급판정_(MEMB_등급목록_(session.병원ID), 금액);
+
+  if (!판정) {
+    return { 등급: '', 보너스: 0, 보너스율: 0, 사용가능액: 금액 };
+  }
+
+  var 보너스 = Math.round(금액 * 판정.보너스율 / 100);
+
+  return {
+    등급: 판정.등급,
+    보너스: 보너스,
+    보너스율: 판정.보너스율,
+    사용가능액: 금액 + 보너스
+  };
+}
+
+
+// =====================================================================
+// 상태 변경 (사용중 ↔ 종료). 물리 삭제 대신 쓴다
+// =====================================================================
+
+function MEMB_상태변경(token, 멤버십ID, 상태) {
+
+  var session = MEMB_세션확인_(token);
+
+  var id = String(멤버십ID || '').trim();
   var 새상태 = String(상태 || '').trim();
 
   if (새상태 !== MEMB_상태_사용중 && 새상태 !== MEMB_상태_종료) {
     throw new Error('상태가 올바르지 않습니다: ' + 새상태);
   }
 
-  var 기존 = DB_findById('회원권', '회원권ID', id);
+  var 기존 = DB_findById('멤버십', '멤버십ID', id);
 
   if (!기존) {
-    throw new Error('회원권을 찾을 수 없습니다: ' + id);
+    throw new Error('멤버십을 찾을 수 없습니다: ' + id);
   }
 
   if (String(기존['병원ID']) !== String(session.병원ID)) {
-    throw new Error('다른 병원의 회원권은 수정할 수 없습니다.');
+    throw new Error('다른 병원의 멤버십은 수정할 수 없습니다.');
   }
 
-  DB_updateById('회원권', '회원권ID', id, {
+  DB_updateById('멤버십', '멤버십ID', id, {
     상태: 새상태,
     수정일시: new Date()
   });
@@ -412,7 +523,7 @@ function MEMB_상태변경(token, 회원권ID, 상태) {
 // =====================================================================
 // 시술 저장용 검증 (Procedure.gs 에서 호출)
 //
-// 구분이 '회원권'인 행에 대해 회원권ID의 유효성과 잔액을 검사한다.
+// 구분이 '멤버십'인 행에 대해 멤버십ID의 유효성과 잔액을 검사한다.
 // ctx = MEMB_검증컨텍스트_(병원ID) 를 한 번 만들어 행마다 재사용한다
 // (행마다 시트를 다시 읽으면 배치 저장이 매우 느려진다).
 //
@@ -424,48 +535,48 @@ function MEMB_검증컨텍스트_(병원ID) {
   var 사용액맵 = MEMB_사용액맵_(병원ID);
   var 맵 = {};
 
-  DB_findWhere('회원권', { 병원ID: 병원ID }).forEach(function(row) {
+  DB_findWhere('멤버십', { 병원ID: 병원ID }).forEach(function(row) {
     var m = MEMB_행변환_(row, 사용액맵);
-    맵[m.회원권ID] = m;
+    맵[m.멤버십ID] = m;
   });
 
-  return { 회원권맵: 맵, 누적: {} };
+  return { 멤버십맵: 맵, 누적: {} };
 }
 
 
-function MEMB_사용오류_(ctx, 회원권ID, 환자번호, 금액) {
+function MEMB_사용오류_(ctx, 멤버십ID, 환자번호, 금액) {
 
-  var id = String(회원권ID || '').trim();
+  var id = String(멤버십ID || '').trim();
 
   if (id === '') {
-    return '시술구분이 회원권이면 사용할 회원권을 선택해야 합니다.';
+    return '시술구분이 멤버십이면 사용할 멤버십을 선택해야 합니다.';
   }
 
-  var m = ctx.회원권맵[id];
+  var m = ctx.멤버십맵[id];
 
   if (!m) {
-    return '회원권 "' + id + '"을(를) 찾을 수 없습니다.';
+    return '멤버십 "' + id + '"을(를) 찾을 수 없습니다.';
   }
 
   if (String(m.환자번호) !== String(환자번호 || '').trim()) {
-    return '회원권 "' + id + '"은(는) 환자번호 ' + m.환자번호 +
+    return '멤버십 "' + id + '"은(는) 환자번호 ' + m.환자번호 +
       ' 의 것입니다. 이 시술의 환자번호와 다릅니다.';
   }
 
   if (m.상태 === MEMB_상태_종료) {
-    return '회원권 "' + id + '"은(는) 종료된 회원권입니다.';
+    return '멤버십 "' + id + '"은(는) 종료된 멤버십입니다.';
   }
 
   if (m.만료됨) {
-    return '회원권 "' + id + '"은(는) 유효기간이 지났습니다 (' + m.유효기간 + ').';
+    return '멤버십 "' + id + '"은(는) 유효기간이 지났습니다 (' + m.유효기간 + ').';
   }
 
-  // 같은 배치 안에서 여러 행이 같은 회원권을 쓰면 누적해서 검사해야 한다
+  // 같은 배치 안에서 여러 행이 같은 멤버십을 쓰면 누적해서 검사해야 한다
   var 이미 = ctx.누적[id] || 0;
   var 남은 = m.잔액 - 이미;
 
   if ((Number(금액) || 0) > 남은) {
-    return '회원권 잔액이 부족합니다. 잔액 ' + 남은.toLocaleString('ko-KR') +
+    return '멤버십 잔액이 부족합니다. 잔액 ' + 남은.toLocaleString('ko-KR') +
       '원 / 시술금액 ' + (Number(금액) || 0).toLocaleString('ko-KR') + '원';
   }
 
@@ -486,40 +597,40 @@ function MEMB_사용오류_(ctx, 회원권ID, 환자번호, 금액) {
 // 반환: 오류 문구 또는 null
 // =====================================================================
 
-function MEMB_수정오류_(병원ID, 회원권ID, 환자번호, 새금액, 기존금액) {
+function MEMB_수정오류_(병원ID, 멤버십ID, 환자번호, 새금액, 기존금액) {
 
-  var id = String(회원권ID || '').trim();
+  var id = String(멤버십ID || '').trim();
 
   if (id === '') {
-    return '시술구분이 회원권이면 사용할 회원권을 선택해야 합니다.';
+    return '시술구분이 멤버십이면 사용할 멤버십을 선택해야 합니다.';
   }
 
-  var row = DB_findById('회원권', '회원권ID', id);
+  var row = DB_findById('멤버십', '멤버십ID', id);
 
   if (!row || String(row['병원ID']) !== String(병원ID)) {
-    return '회원권 "' + id + '"을(를) 찾을 수 없습니다.';
+    return '멤버십 "' + id + '"을(를) 찾을 수 없습니다.';
   }
 
   var m = MEMB_행변환_(row, MEMB_사용액맵_(병원ID));
 
   if (String(m.환자번호) !== String(환자번호 || '').trim()) {
-    return '회원권 "' + id + '"은(는) 환자번호 ' + m.환자번호 +
+    return '멤버십 "' + id + '"은(는) 환자번호 ' + m.환자번호 +
       ' 의 것입니다. 이 시술의 환자번호와 다릅니다.';
   }
 
   if (m.상태 === MEMB_상태_종료) {
-    return '회원권 "' + id + '"은(는) 종료된 회원권입니다.';
+    return '멤버십 "' + id + '"은(는) 종료된 멤버십입니다.';
   }
 
   if (m.만료됨) {
-    return '회원권 "' + id + '"은(는) 유효기간이 지났습니다 (' + m.유효기간 + ').';
+    return '멤버십 "' + id + '"은(는) 유효기간이 지났습니다 (' + m.유효기간 + ').';
   }
 
   // 자기 자신의 기존 차감분을 되돌린 가용 잔액
   var 가용 = m.잔액 + (Number(기존금액) || 0);
 
   if ((Number(새금액) || 0) > 가용) {
-    return '회원권 잔액이 부족합니다. 이 시술을 제외한 잔액 ' +
+    return '멤버십 잔액이 부족합니다. 이 시술을 제외한 잔액 ' +
       가용.toLocaleString('ko-KR') + '원 / 시술금액 ' +
       (Number(새금액) || 0).toLocaleString('ko-KR') + '원';
   }
@@ -531,13 +642,13 @@ function MEMB_수정오류_(병원ID, 회원권ID, 환자번호, 새금액, 기�
 // =====================================================================
 // 테스트 (편집기에서 수동 실행, Logger 확인)
 // 등록 → 조회 → 잔액 → 수정 차단 → 상태변경 순으로 확인한다.
-// ★ 테스트 회원권 1건이 남는다. 확인 후 시트에서 직접 삭제할 것
+// ★ 테스트 멤버십 1건이 남는다. 확인 후 시트에서 직접 삭제할 것
 //   (test_VENDOR_전체흐름 과 동일한 성격 — 인수인계 §5-7)
 // =====================================================================
 
 function test_MEMB_전체흐름() {
 
-  Logger.log('=== 회원권 전체흐름 테스트 시작 ===');
+  Logger.log('=== 멤버십 전체흐름 테스트 시작 ===');
 
   var 사용자 = DB_findWhere('사용자', { 병원ID: 'H003', 아이디: 'joon' })[0];
 
@@ -547,7 +658,7 @@ function test_MEMB_전체흐름() {
   }
 
   var token = AUTH_createSession(사용자);
-  var 표식 = '__테스트회원권__' + new Date().getTime();
+  var 표식 = '__테스트멤버십__' + new Date().getTime();
 
   MEMB_add(token, {
     환자번호: '9999999',
@@ -566,7 +677,7 @@ function test_MEMB_전체흐름() {
     return;
   }
 
-  Logger.log('1. 등록: ' + 대상.회원권ID + ' / 총액 ' + 대상.총액);
+  Logger.log('1. 등록: ' + 대상.멤버십ID + ' / 총액 ' + 대상.총액);
   Logger.log('2. 잔액 계산: 사용액 ' + 대상.사용액 + ' / 잔액 ' + 대상.잔액 +
     ' (사용 이력이 없으므로 총액과 같아야 정상)');
   Logger.log('3. 사용가능 판정: ' + 대상.사용가능 + ' (true여야 정상)');
@@ -574,20 +685,20 @@ function test_MEMB_전체흐름() {
   var ctx = MEMB_검증컨텍스트_('H003');
 
   Logger.log('4. 잔액 내 사용: ' +
-    (MEMB_사용오류_(ctx, 대상.회원권ID, '9999999', 300000) === null
+    (MEMB_사용오류_(ctx, 대상.멤버십ID, '9999999', 300000) === null
       ? '통과' : '★ 차단됨'));
 
   Logger.log('5. 잔액 초과(누적 800000 시도): ' +
-    (MEMB_사용오류_(ctx, 대상.회원권ID, '9999999', 800000) !== null
+    (MEMB_사용오류_(ctx, 대상.멤버십ID, '9999999', 800000) !== null
       ? '정상 차단' : '★ 통과됨 — 누적 검사 실패'));
 
   Logger.log('6. 타 환자 사용: ' +
-    (MEMB_사용오류_(ctx, 대상.회원권ID, '1111', 10000) !== null
+    (MEMB_사용오류_(ctx, 대상.멤버십ID, '1111', 10000) !== null
       ? '정상 차단' : '★ 통과됨'));
 
   try {
     MEMB_update(token, {
-      회원권ID: 대상.회원권ID,
+      멤버십ID: 대상.멤버십ID,
       상품명: 표식,
       판매일: 대상.판매일,
       총액: 1000
@@ -597,17 +708,17 @@ function test_MEMB_전체흐름() {
     Logger.log('7. 총액 축소 차단: 정상 차단 — ' + e.message);
   }
 
-  MEMB_상태변경(token, 대상.회원권ID, MEMB_상태_종료);
+  MEMB_상태변경(token, 대상.멤버십ID, MEMB_상태_종료);
 
   var 종료후 = MEMB_getList(token, {}).filter(function(m) {
-    return m.회원권ID === 대상.회원권ID;
+    return m.멤버십ID === 대상.멤버십ID;
   });
 
   Logger.log('8. 종료 처리: 기본 목록 잔존 ' + 종료후.length + '건 (0이어야 정상)');
-  Logger.log('9. 정리: 테스트 회원권을 종료 상태로 남김 (' + 대상.회원권ID + ').');
+  Logger.log('9. 정리: 테스트 멤버십을 종료 상태로 남김 (' + 대상.멤버십ID + ').');
   Logger.log('   시트에서 직접 삭제하십시오.');
 
   AUTH_logout(token);
 
-  Logger.log('=== 회원권 전체흐름 테스트 종료 ===');
+  Logger.log('=== 멤버십 전체흐름 테스트 종료 ===');
 }

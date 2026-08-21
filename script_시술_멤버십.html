@@ -1,0 +1,559 @@
+<script>
+/* =====================================================================
+   script_시술_멤버십.html — 멤버십 잔여 관리 프론트
+   대상 페이지: procedure_multi (시술 > 다회차 관리)
+   서버: Membership.gs (MEMB_*)  /  15_멤버십
+
+   - 판매 1건 = 1행. 잔액은 서버가 05_시술에서 계산해 내려준다(저장하지 않음)
+   - 물리 삭제 없음: 상태 '사용중' / '종료'
+   - 행 클릭 → 이 멤버십으로 차감된 시술 목록 팝업
+   - 표 컬럼 너비 조절은 표_자동리사이즈적용()이 자동으로 붙인다 (핸들 넣지 말 것)
+   ===================================================================== */
+
+
+let 멤버십_원본목록 = [];
+
+let 멤버십_수정중ID = null;
+
+
+function 멤버십_escape(value) {
+
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+
+function 멤버십_금액(n) {
+
+  return (Number(n) || 0).toLocaleString('ko-KR');
+}
+
+
+/* ================================================================
+   화면
+   ================================================================ */
+
+function 멤버십_화면() {
+
+  return `
+    <div class="멤버십폼카드">
+
+      <div class="카드제목" id="멤버십폼제목">멤버십 등록</div>
+      <div class="카드설명">
+        멤버십을 판매하면 여기에 등록합니다. 시술 등록에서 구분을 <strong>멤버십</strong>으로
+        선택하면 이 목록에서 골라 금액만큼 차감됩니다.
+        잔액은 시술 내역에서 자동 계산되므로 따로 관리하지 않아도 됩니다.
+      </div>
+
+      <input type="hidden" id="멤버십_수정ID">
+
+      <div class="멤버십폼줄">
+
+        <div class="필드">
+          <label>환자번호 <span class="필수">*</span></label>
+          <input type="text" id="멤버십_환자번호" style="width:120px">
+        </div>
+
+        <div class="필드">
+          <label>환자명</label>
+          <input type="text" id="멤버십_환자명" style="width:110px">
+        </div>
+
+        <div class="필드">
+          <label>판매일 <span class="필수">*</span></label>
+          <input type="date" id="멤버십_판매일">
+        </div>
+
+        <div class="필드">
+          <label>결제액 <span class="필수">*</span></label>
+          <input type="text" id="멤버십_결제액" placeholder="예: 1000000"
+                 style="width:120px" onchange="멤버십_등급미리보기()">
+        </div>
+
+        <div class="필드">
+          <label>등급</label>
+          <input type="text" id="멤버십_등급" placeholder="자동" style="width:100px">
+        </div>
+
+        <div class="필드">
+          <label>보너스</label>
+          <input type="text" id="멤버십_보너스" placeholder="자동" style="width:110px">
+        </div>
+
+        <div class="필드">
+          <label>유효기간</label>
+          <input type="date" id="멤버십_유효기간">
+        </div>
+
+        <div class="필드" style="flex:1; min-width:160px">
+          <label>비고</label>
+          <input type="text" id="멤버십_비고">
+        </div>
+
+      </div>
+
+      <div class="멤버십폼하단">
+        <div class="시술상태" id="멤버십_상태"></div>
+        <div class="버튼들">
+          <button class="버튼 버튼보조 숨김" id="멤버십_취소버튼" onclick="멤버십_폼초기화()">수정 취소</button>
+          <button class="버튼 버튼주요" id="멤버십_저장버튼" onclick="멤버십_저장()">등록</button>
+        </div>
+      </div>
+
+    </div>
+
+
+    <div class="시술표카드">
+
+      <div class="시술표카드헤더">
+        <div class="제목">멤버십 목록</div>
+        <div class="우측">
+          <label class="멤버십종료포함">
+            <input type="checkbox" id="멤버십_종료포함" onchange="멤버십_불러오기()">
+            종료 포함
+          </label>
+          <span id="멤버십_요약"></span>
+        </div>
+      </div>
+
+      <div class="시술표영역">
+        <table class="멤버십표 목록표" id="멤버십표">
+          <colgroup>
+            <col data-key="멤버십ID" style="width:95px">
+            <col data-key="환자번호" style="width:95px">
+            <col data-key="환자명" style="width:100px">
+            <col data-key="등급" style="width:90px">
+            <col data-key="판매일" style="width:100px">
+            <col data-key="결제액" style="width:110px"><col data-key="보너스" style="width:100px">
+            <col data-key="사용가능액" style="width:115px"><col data-key="사용액" style="width:110px">
+            <col data-key="잔액" style="width:110px">
+            <col data-key="유효기간" style="width:100px">
+            <col data-key="상태" style="width:80px">
+            <col data-key="관리" style="width:120px">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>멤버십ID</th><th>환자번호</th><th>환자명</th><th>등급</th>
+              <th>판매일</th><th>결제액</th><th>보너스</th><th>사용가능액</th>
+              <th>사용액</th><th>잔액</th>
+              <th>유효기간</th><th>상태</th><th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="멤버십표본문">
+            <tr><td colspan="13"><div class="시술안내">불러오는 중...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="시술도구안내" style="margin-top:10px; margin-bottom:0;">
+        행을 클릭하면 이 멤버십으로 차감된 시술 목록을 볼 수 있습니다.
+        잔액은 시술 취소 시 자동으로 복구됩니다.
+      </div>
+
+    </div>
+
+    ` + 시술_상세팝업HTML() + `
+  `;
+}
+
+
+/* ================================================================
+   초기화 / 조회
+   ================================================================ */
+
+function 멤버십_초기화() {
+
+  멤버십_수정중ID = null;
+  document.getElementById('멤버십_판매일').value = 시술_오늘문자열();
+  멤버십_불러오기();
+}
+
+
+function 멤버십_불러오기() {
+
+  const tbody = document.getElementById('멤버십표본문');
+
+  if (!tbody) {
+    return;
+  }
+
+  const 종료포함 =
+    (document.getElementById('멤버십_종료포함') || {}).checked === true;
+
+  google.script.run
+
+    .withSuccessHandler(function(목록) {
+
+      멤버십_원본목록 = 목록 || [];
+      멤버십_표렌더();
+    })
+
+    .withFailureHandler(function(error) {
+
+      tbody.innerHTML =
+        '<tr><td colspan="13"><div class="시술안내">조회 실패</div></td></tr>';
+
+      console.error('멤버십 조회 실패', error);
+      멤버십_상태표시('불러오지 못했습니다: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .MEMB_getList(현재세션.token, { 종료포함: 종료포함 });
+}
+
+
+function 멤버십_표렌더() {
+
+  const tbody = document.getElementById('멤버십표본문');
+
+  if (!tbody) {
+    return;
+  }
+
+  const 요약 = document.getElementById('멤버십_요약');
+
+  if (요약) {
+
+    let 총 = 0, 보 = 0, 잔 = 0;
+
+    멤버십_원본목록.forEach(function(m) {
+      총 += m.결제액;
+      보 += m.보너스;
+      잔 += m.잔액;
+    });
+
+    요약.textContent =
+      멤버십_원본목록.length + '건 · 결제 ' + 멤버십_금액(총) +
+      '원 · 보너스 ' + 멤버십_금액(보) +
+      '원 · 잔액 ' + 멤버십_금액(잔) + '원';
+  }
+
+  if (멤버십_원본목록.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="13"><div class="시술안내">등록된 멤버십이 없습니다.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = 멤버십_원본목록.map(function(m) {
+
+    /* 상태 표시: 종료 > 만료 > 소진 > 사용중 순으로 판단 */
+    let 상태칸;
+
+    if (m.상태 === '종료') {
+      상태칸 = '<span class="멤버십종료">종료</span>';
+    } else if (m.만료됨) {
+      상태칸 = '<span class="멤버십만료">만료</span>';
+    } else if (m.잔액 <= 0) {
+      상태칸 = '<span class="멤버십소진">소진</span>';
+    } else {
+      상태칸 = '사용중';
+    }
+
+    const 잔액클래스 = m.잔액 <= 0 ? ' 멤버십잔액없음' : '';
+
+    return '<tr class="멤버십행" onclick="멤버십_상세열기(\'' +
+        멤버십_escape(m.멤버십ID) + '\')" title="클릭하면 사용 내역">' +
+      '<td>' + 멤버십_escape(m.멤버십ID) + '</td>' +
+      '<td>' + 멤버십_escape(m.환자번호) + '</td>' +
+      '<td>' + 멤버십_escape(m.환자명) + '</td>' +
+      '<td>' + 멤버십_escape(m.등급) + '</td>' +
+      '<td>' + 멤버십_escape(m.판매일) + '</td>' +
+      '<td class="우">' + 멤버십_금액(m.결제액) + '</td>' +
+      '<td class="우 멤버십보너스">' +
+        (m.보너스 > 0 ? '+' + 멤버십_금액(m.보너스) : '-') + '</td>' +
+      '<td class="우">' + 멤버십_금액(m.사용가능액) + '</td>' +
+      '<td class="우">' + 멤버십_금액(m.사용액) + '</td>' +
+      '<td class="우' + 잔액클래스 + '">' + 멤버십_금액(m.잔액) + '</td>' +
+      '<td>' + 멤버십_escape(m.유효기간) + '</td>' +
+      '<td>' + 상태칸 + '</td>' +
+      /* 관리 칸은 행 클릭(상세)과 겹치지 않게 이벤트 전파를 막는다 */
+      '<td onclick="event.stopPropagation()">' +
+        '<span class="시술링크" onclick="멤버십_수정폼열기(\'' +
+          멤버십_escape(m.멤버십ID) + '\')">수정</span>' +
+        (m.상태 === '종료'
+          ? '<span class="시술링크" onclick="멤버십_상태변경(\'' +
+              멤버십_escape(m.멤버십ID) + '\', \'사용중\')">사용재개</span>'
+          : '<span class="시술링크" onclick="멤버십_상태변경(\'' +
+              멤버십_escape(m.멤버십ID) + '\', \'종료\')">종료</span>') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+
+function 멤버십_상태표시(문구, 오류) {
+
+  const el = document.getElementById('멤버십_상태');
+
+  if (!el) {
+    return;
+  }
+
+  el.className = '시술상태 ' + (오류 ? '오류' : '성공');
+  el.textContent = 문구;
+}
+
+
+/* ================================================================
+   등록 / 수정
+   ================================================================ */
+
+function 멤버십_폼초기화() {
+
+  멤버십_수정중ID = null;
+
+  document.getElementById('멤버십_수정ID').value = '';
+  document.getElementById('멤버십_환자번호').value = '';
+  document.getElementById('멤버십_환자명').value = '';
+  document.getElementById('멤버십_등급').value = '';
+  document.getElementById('멤버십_보너스').value = '';
+  document.getElementById('멤버십_판매일').value = 시술_오늘문자열();
+  document.getElementById('멤버십_결제액').value = '';
+  document.getElementById('멤버십_유효기간').value = '';
+  document.getElementById('멤버십_비고').value = '';
+
+  document.getElementById('멤버십폼제목').textContent = '멤버십 등록';
+  document.getElementById('멤버십_저장버튼').textContent = '등록';
+  document.getElementById('멤버십_취소버튼').classList.add('숨김');
+
+  멤버십_상태표시('');
+}
+
+
+function 멤버십_수정폼열기(멤버십ID) {
+
+  const m = 멤버십_원본목록.filter(function(x) {
+    return x.멤버십ID === 멤버십ID;
+  })[0];
+
+  if (!m) {
+    return;
+  }
+
+  멤버십_수정중ID = 멤버십ID;
+
+  document.getElementById('멤버십_수정ID').value = 멤버십ID;
+  document.getElementById('멤버십_환자번호').value = m.환자번호;
+  document.getElementById('멤버십_환자명').value = m.환자명;
+  document.getElementById('멤버십_등급').value = m.등급;
+  document.getElementById('멤버십_보너스').value = m.보너스;
+  document.getElementById('멤버십_판매일').value = m.판매일;
+  document.getElementById('멤버십_결제액').value = m.결제액;
+  document.getElementById('멤버십_유효기간').value = m.유효기간;
+  document.getElementById('멤버십_비고').value = m.비고;
+
+  document.getElementById('멤버십폼제목').textContent =
+    '멤버십 수정 — ' + 멤버십ID;
+  document.getElementById('멤버십_저장버튼').textContent = '저장';
+  document.getElementById('멤버십_취소버튼').classList.remove('숨김');
+
+  멤버십_상태표시(
+    '이미 ' + 멤버십_금액(m.사용액) + '원 사용했습니다. 결제액+보너스를 그보다 작게 줄일 수 없습니다.'
+  );
+
+  document.querySelector('.멤버십폼카드')
+    .scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+
+/* 결제액을 입력하면 기준정보 등급표로 등급·보너스를 자동 채운다.
+   사용자가 직접 고친 값이 있으면 덮어쓰지 않는다 (예외 케이스 허용) */
+function 멤버십_등급미리보기() {
+
+  const 결제액 = document.getElementById('멤버십_결제액').value;
+
+  if (!결제액) {
+    return;
+  }
+
+  const 등급el = document.getElementById('멤버십_등급');
+  const 보너스el = document.getElementById('멤버십_보너스');
+
+  google.script.run
+
+    .withSuccessHandler(function(r) {
+
+      if (!r) {
+        return;
+      }
+
+      /* 비어 있을 때만 채운다 — 수동 입력값을 존중 */
+      if (!등급el.value.trim()) { 등급el.value = r.등급; }
+      if (!보너스el.value.trim()) { 보너스el.value = r.보너스; }
+
+      멤버십_상태표시(
+        r.등급
+          ? r.등급 + ' 등급 · 보너스 ' + r.보너스율 + '% (' + 멤버십_금액(r.보너스) +
+            '원) · 사용가능 ' + 멤버십_금액(r.사용가능액) + '원'
+          : '해당하는 등급이 없습니다. 보너스를 직접 입력하거나, ' +
+            '관리 > 시술 기준 관리 > 멤버십 등급에서 기준을 등록해주세요.'
+      );
+    })
+
+    .withFailureHandler(function(error) {
+      console.error('등급 미리보기 실패', error);
+    })
+
+    .MEMB_등급미리보기(현재세션.token, 결제액);
+}
+
+
+function 멤버십_저장() {
+
+  const data = {
+    환자번호: document.getElementById('멤버십_환자번호').value.trim(),
+    환자명: document.getElementById('멤버십_환자명').value.trim(),
+    등급: document.getElementById('멤버십_등급').value.trim(),
+    보너스: document.getElementById('멤버십_보너스').value.trim(),
+    판매일: document.getElementById('멤버십_판매일').value,
+    결제액: document.getElementById('멤버십_결제액').value,
+    유효기간: document.getElementById('멤버십_유효기간').value,
+    비고: document.getElementById('멤버십_비고').value.trim()
+  };
+
+  if (!data.환자번호 || !data.판매일 || !data.결제액) {
+    멤버십_상태표시('환자번호·판매일·결제액은 모두 입력해야 합니다.', true);
+    return;
+  }
+
+  const 수정 = !!멤버십_수정중ID;
+
+  if (수정) {
+    data.멤버십ID = 멤버십_수정중ID;
+  }
+
+  const 성공 = function() {
+    멤버십_폼초기화();
+    멤버십_상태표시(수정 ? '수정되었습니다.' : '등록되었습니다.');
+    멤버십_불러오기();
+  };
+
+  const 실패 = function(error) {
+    멤버십_상태표시(
+      (수정 ? '수정 실패: ' : '등록 실패: ') +
+      (error && error.message ? error.message : error), true);
+  };
+
+  if (수정) {
+    google.script.run.withSuccessHandler(성공).withFailureHandler(실패)
+      .MEMB_update(현재세션.token, data);
+  } else {
+    google.script.run.withSuccessHandler(성공).withFailureHandler(실패)
+      .MEMB_add(현재세션.token, data);
+  }
+}
+
+
+function 멤버십_상태변경(멤버십ID, 상태) {
+
+  const 문구 = 상태 === '종료'
+    ? '이 멤버십을 종료할까요?\n목록에서 빠지고 시술 등록에서 선택할 수 없게 됩니다.\n과거 사용 기록은 그대로 유지됩니다.'
+    : '이 멤버십을 다시 사용할까요?';
+
+  if (!confirm(문구)) {
+    return;
+  }
+
+  google.script.run
+
+    .withSuccessHandler(function() {
+      멤버십_상태표시(상태 === '종료' ? '종료되었습니다.' : '사용재개되었습니다.');
+      멤버십_불러오기();
+    })
+
+    .withFailureHandler(function(error) {
+      멤버십_상태표시('처리 실패: ' +
+        (error && error.message ? error.message : error), true);
+    })
+
+    .MEMB_상태변경(현재세션.token, 멤버십ID, 상태);
+}
+
+
+/* ================================================================
+   사용 내역 팝업 (시술 상세 팝업 재사용)
+   ================================================================ */
+
+function 멤버십_상세열기(멤버십ID) {
+
+  const m = 멤버십_원본목록.filter(function(x) {
+    return x.멤버십ID === 멤버십ID;
+  })[0];
+
+  if (!m) {
+    return;
+  }
+
+  document.getElementById('시술금일상세제목').textContent =
+    m.환자명 + ' (' + m.환자번호 + ')' + (m.등급 ? ' — ' + m.등급 : '');
+
+  document.getElementById('시술금일상세부제').textContent =
+    '판매 ' + m.판매일 +
+    (m.유효기간 ? ' · 유효기간 ' + m.유효기간 : '') +
+    ' · 결제 ' + 멤버십_금액(m.결제액) + '원' +
+    (m.보너스 > 0 ? ' + 보너스 ' + 멤버십_금액(m.보너스) + '원' : '') +
+    ' = ' + 멤버십_금액(m.사용가능액) + '원';
+
+  document.getElementById('시술금일상세합계').textContent =
+    '사용 ' + 멤버십_금액(m.사용액) + '원 · 잔액 ' + 멤버십_금액(m.잔액) + '원';
+
+  const 본문 = document.getElementById('시술금일상세본문');
+  본문.innerHTML = '<div class="시술안내">불러오는 중...</div>';
+
+  document.getElementById('시술금일상세덮개').classList.remove('숨김');
+
+  google.script.run
+
+    .withSuccessHandler(function(내역) {
+
+      내역 = 내역 || [];
+
+      if (내역.length === 0) {
+        본문.innerHTML =
+          '<div class="시술안내">아직 이 멤버십으로 차감된 시술이 없습니다.</div>';
+        return;
+      }
+
+      본문.innerHTML =
+        '<table class="시술상세표">' +
+          '<thead><tr>' +
+            '<th>시술일</th><th>시술명</th><th>용량</th><th>단위</th>' +
+            '<th class="우">차감액</th><th>상태</th>' +
+          '</tr></thead>' +
+          '<tbody>' +
+            내역.map(function(r) {
+
+              const 취소됨 = r.상태 === '취소';
+
+              return '<tr' + (취소됨 ? ' class="멤버십취소행"' : '') + '>' +
+                '<td>' + 멤버십_escape(r.시술일) + '</td>' +
+                '<td title="' + 멤버십_escape(r.시술명) + '">' +
+                  멤버십_escape(r.시술명) + '</td>' +
+                '<td>' + 멤버십_escape(r.용량) + '</td>' +
+                '<td>' + 멤버십_escape(r.단위) + '</td>' +
+                /* 취소 건은 차감에서 빠지므로 0으로 보이게 표시한다 */
+                '<td class="우">' +
+                  (취소됨
+                    ? '<span class="시술취소텍스트">차감 없음</span>'
+                    : 멤버십_금액(r.시술금액)) +
+                '</td>' +
+                '<td>' + (취소됨
+                  ? '<span class="시술취소텍스트">취소</span>'
+                  : 멤버십_escape(r.상태)) + '</td>' +
+              '</tr>';
+            }).join('') +
+          '</tbody>' +
+        '</table>';
+    })
+
+    .withFailureHandler(function(error) {
+      본문.innerHTML = '<div class="시술안내">사용 내역을 불러오지 못했습니다.</div>';
+      console.error('멤버십 사용내역 조회 실패', error);
+    })
+
+    .MEMB_사용내역(현재세션.token, 멤버십ID);
+}
+</script>
