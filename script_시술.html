@@ -48,6 +48,79 @@ const 시술_구분목록 = ['일반', '회원권', '체험단무료', '다회�
 
 
 /* ================================================================
+   시술 내역 표 컬럼 정의 (백로그 ④⑤, 2026-08-20)
+
+   순서는 시술 등록 입력표(시술_입력열)를 기준으로 맞췄다.
+     등록: 환자번호 환자명 담당실장 담당원장 시술명 용량 단위 시술금액
+           비고 패키지여부 내원경로 세부 방문유형
+   내역에만 있는 컬럼(시술일/구분/분류/상태/관리)은 의미가 가까운 자리에 끼운다.
+     시술일 → 맨 앞(조회 기준) / 구분 → 환자명 뒤 / 분류 → 시술명 뒤
+     상태·관리 → 맨 뒤
+   ★ 담당실장이 담당원장보다 앞이다 (등록 화면과 동일. 이전 내역은 반대였음)
+
+   필드
+     키    : 데이터 필드명 겸 저장키. 정렬·숨김 설정이 이 값으로 저장된다
+     이름  : 헤더 표시명
+     너비  : 기본 너비(px). 사용자가 조절하면 localStorage 가 우선
+     정렬  : 헤더 클릭 정렬 지원 여부
+     우    : 우측 정렬 셀
+     고정  : 숨길 수 없는 컬럼 (체크박스에서 제외)
+   ================================================================ */
+
+const 시술_컬럼 = [
+  { 키: '시술일',     이름: '시술일',   너비: 92,  정렬: true },
+  { 키: '환자번호',   이름: '환자번호', 너비: 85,  정렬: true },
+  { 키: '환자명',     이름: '환자명',   너비: 80,  정렬: true },
+  { 키: '시술구분',   이름: '구분',     너비: 75,  정렬: true },
+  { 키: '담당실장',   이름: '담당실장', 너비: 80 },
+  { 키: '담당원장',   이름: '담당원장', 너비: 80 },
+  { 키: '시술명',     이름: '시술명',   너비: 140, 정렬: true },
+  { 키: '분류',       이름: '분류',     너비: 85,  정렬: true },
+  { 키: '용량',       이름: '용량',     너비: 55,  우: true },
+  { 키: '단위',       이름: '단위',     너비: 55 },
+  { 키: '시술금액',   이름: '시술금액', 너비: 90,  정렬: true, 우: true },
+  { 키: '패키지여부', 이름: '패키지',   너비: 60 },
+  { 키: '내원경로',   이름: '내원경로', 너비: 75,  정렬: true },
+  { 키: '세부',       이름: '세부',     너비: 85,  정렬: true },
+  { 키: '방문유형',   이름: '방문유형', 너비: 75,  정렬: true },
+  { 키: '상태',       이름: '상태',     너비: 55 },
+  { 키: '관리',       이름: '관리',     너비: 95,  고정: true }
+];
+
+/* 숨긴 컬럼 키 목록 (백로그 ④). 컬럼 구성이 바뀌었으므로 키 버전 v4 */
+const 시술_숨김저장키 = '시술표_숨김컬럼_v4';
+
+let 시술_숨김컬럼 = [];
+
+
+function 시술_숨김불러오기() {
+
+  try {
+    const v = JSON.parse(localStorage.getItem(시술_숨김저장키) || '[]');
+    시술_숨김컬럼 = Array.isArray(v) ? v : [];
+  } catch (e) {
+    시술_숨김컬럼 = [];
+  }
+}
+
+
+function 시술_숨김저장() {
+
+  try {
+    localStorage.setItem(시술_숨김저장키, JSON.stringify(시술_숨김컬럼));
+  } catch (e) { /* 프라이빗 모드 등 — 조용히 무시 */ }
+}
+
+
+function 시술_보이는컬럼() {
+
+  return 시술_컬럼.filter(function(c) {
+    return 시술_숨김컬럼.indexOf(c.키) === -1;
+  });
+}
+
+
+/* ================================================================
    공통 헬퍼
    ================================================================ */
 
@@ -652,36 +725,13 @@ function 시술_내역화면() {
         <div class="우측" id="시술목록_상태">불러오는 중...</div>
       </div>
 
+      <div class="시술컬럼설정" id="시술컬럼설정"></div>
+
       <div class="시술표영역">
         <table class="시술표 목록표" id="시술표">
-          <colgroup>
-            <col style="width:92px"><col style="width:85px"><col style="width:80px">
-            <col style="width:75px"><col style="width:70px"><col style="width:85px">
-            <col style="width:70px"><col style="width:140px"><col style="width:85px">
-            <col style="width:55px"><col style="width:55px"><col style="width:90px">
-            <col style="width:80px"><col style="width:80px"><col style="width:60px">
-            <col style="width:55px"><col style="width:95px">
-          </colgroup>
+          <colgroup id="시술표컬럼"></colgroup>
           <thead>
-            <tr>
-              <th data-키="시술일"><span class="th_텍스트" onclick="시술_정렬('시술일')">시술일<span class="정렬표시" id="시술정렬_시술일"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="환자번호"><span class="th_텍스트" onclick="시술_정렬('환자번호')">환자번호<span class="정렬표시" id="시술정렬_환자번호"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="환자명"><span class="th_텍스트" onclick="시술_정렬('환자명')">환자명<span class="정렬표시" id="시술정렬_환자명"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="시술구분"><span class="th_텍스트" onclick="시술_정렬('시술구분')">구분<span class="정렬표시" id="시술정렬_시술구분"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="내원경로"><span class="th_텍스트" onclick="시술_정렬('내원경로')">내원경로<span class="정렬표시" id="시술정렬_내원경로"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="세부"><span class="th_텍스트" onclick="시술_정렬('세부')">세부<span class="정렬표시" id="시술정렬_세부"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="방문유형"><span class="th_텍스트" onclick="시술_정렬('방문유형')">방문유형<span class="정렬표시" id="시술정렬_방문유형"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="시술명"><span class="th_텍스트" onclick="시술_정렬('시술명')">시술명<span class="정렬표시" id="시술정렬_시술명"></span></span><span class="리사이즈핸들"></span></th>
-              <th data-키="분류"><span class="th_텍스트" onclick="시술_정렬('분류')">분류<span class="정렬표시" id="시술정렬_분류"></span></span><span class="리사이즈핸들"></span></th>
-              <th><span class="th_텍스트">용량</span><span class="리사이즈핸들"></span></th>
-              <th><span class="th_텍스트">단위</span><span class="리사이즈핸들"></span></th>
-              <th data-키="시술금액"><span class="th_텍스트" onclick="시술_정렬('시술금액')">시술금액<span class="정렬표시" id="시술정렬_시술금액"></span></span><span class="리사이즈핸들"></span></th>
-              <th><span class="th_텍스트">담당원장</span><span class="리사이즈핸들"></span></th>
-              <th><span class="th_텍스트">담당실장</span><span class="리사이즈핸들"></span></th>
-              <th><span class="th_텍스트">패키지</span><span class="리사이즈핸들"></span></th>
-              <th><span class="th_텍스트">상태</span><span class="리사이즈핸들"></span></th>
-              <th><span class="th_텍스트">관리</span></th>
-            </tr>
+            <tr id="시술표머리"></tr>
           </thead>
           <tbody id="시술표본문">
             <tr><td colspan="17"><div class="시술안내">불러오는 중...</div></td></tr>
@@ -695,6 +745,12 @@ function 시술_내역화면() {
 
 
 function 시술_내역초기화() {
+
+  /* 컬럼 표시/숨김 복원 + 머리·설정칩 렌더 (백로그 ④⑤) */
+  시술_정렬상태 = { 키: '', 방향: 1 };
+  시술_숨김불러오기();
+  시술_컬럼설정렌더();
+  시술_내역머리렌더();
 
   시술_기준목록불러오기(function() {
     // 수정폼 드롭다운 채우기
@@ -868,25 +924,152 @@ function 시술_정렬(키) {
     시술_정렬상태 = { 키: 키, 방향: 1 };
   }
 
-  document.querySelectorAll('.시술표 .정렬표시').forEach(function(el) {
-    el.textContent = '';
-    el.classList.remove('활성');
-  });
+  /* 머리를 다시 그리면 정렬표시(▲▼)도 함께 갱신된다.
+     핸들이 사라지므로 리사이즈 재부착이 필요해 전체 렌더를 쓴다 */
+  시술_내역표전체렌더();
+}
 
-  const 표시 = document.getElementById('시술정렬_' + 키);
 
-  if (표시) {
-    표시.textContent = 시술_정렬상태.방향 === 1 ? ' ▲' : ' ▼';
-    표시.classList.add('활성');
+/* ================================================================
+   내역 표 머리 + 컬럼 표시/숨김 (백로그 ④⑤)
+
+   머리(colgroup + thead)를 시술_컬럼 정의에서 만든다.
+   ★ 리사이즈 핸들은 넣지 않는다 — script_공통.html 의 표_자동리사이즈적용()이
+     주입한다 (3-3). 여기서 넣으면 "전용 구현" 으로 오인돼 자동 적용이 건너뛴다.
+   ================================================================ */
+
+function 시술_내역머리렌더() {
+
+  const colgroup = document.getElementById('시술표컬럼');
+  const tr = document.getElementById('시술표머리');
+
+  if (!colgroup || !tr) {
+    return;
   }
 
+  const 컬럼들 = 시술_보이는컬럼();
+
+  colgroup.innerHTML = 컬럼들.map(function(c) {
+    return '<col data-key="' + 시술_escape(c.키) + '" style="width:' + c.너비 + 'px">';
+  }).join('');
+
+  tr.innerHTML = 컬럼들.map(function(c) {
+
+    const 정렬표시 = 시술_정렬상태.키 === c.키
+      ? (시술_정렬상태.방향 === 1 ? ' ▲' : ' ▼')
+      : '';
+
+    const 라벨 = c.정렬
+      ? '<span class="th_텍스트" onclick="시술_정렬(\'' + 시술_escape(c.키) + '\')">' +
+          시술_escape(c.이름) +
+          '<span class="정렬표시' + (정렬표시 ? ' 활성' : '') + '" id="시술정렬_' +
+          시술_escape(c.키) + '">' + 정렬표시 + '</span></span>'
+      : '<span class="th_텍스트">' + 시술_escape(c.이름) + '</span>';
+
+    return '<th>' + 라벨 + '</th>';
+  }).join('');
+}
+
+
+function 시술_컬럼설정렌더() {
+
+  const box = document.getElementById('시술컬럼설정');
+
+  if (!box) {
+    return;
+  }
+
+  const 숨김수 = 시술_숨김컬럼.length;
+
+  box.innerHTML =
+    '<span class="시술컬럼설정라벨">컬럼 표시' +
+      (숨김수 ? ' <span class="시술컬럼숨김수">' + 숨김수 + '개 숨김</span>' : '') +
+    '</span>' +
+    시술_컬럼.filter(function(c) { return !c.고정; }).map(function(c) {
+      const 체크 = 시술_숨김컬럼.indexOf(c.키) === -1 ? ' checked' : '';
+      return '<label class="시술컬럼칩">' +
+        '<input type="checkbox"' + 체크 +
+        ' onchange="시술_컬럼토글(\'' + 시술_escape(c.키) + '\')">' +
+        시술_escape(c.이름) + '</label>';
+    }).join('') +
+    '<span class="시술링크 시술컬럼전체" onclick="시술_컬럼전체표시()">전체 표시</span>';
+}
+
+
+function 시술_컬럼토글(키) {
+
+  const i = 시술_숨김컬럼.indexOf(키);
+
+  if (i === -1) {
+    /* 마지막 하나까지 숨기면 표가 사라진다 — 최소 1개는 남긴다 */
+    if (시술_보이는컬럼().length <= 1) {
+      alert('컬럼을 모두 숨길 수는 없습니다.');
+      시술_컬럼설정렌더();
+      return;
+    }
+    시술_숨김컬럼.push(키);
+  } else {
+    시술_숨김컬럼.splice(i, 1);
+  }
+
+  시술_숨김저장();
+  시술_내역표전체렌더();
+}
+
+
+function 시술_컬럼전체표시() {
+
+  시술_숨김컬럼 = [];
+  시술_숨김저장();
+  시술_내역표전체렌더();
+}
+
+
+/* 머리·본문·설정칩을 다시 그리고 리사이즈를 재부착한다.
+   thead 를 교체하면 주입됐던 핸들이 사라지므로 반드시 다시 붙여야 한다 */
+function 시술_내역표전체렌더() {
+
+  시술_컬럼설정렌더();
+  시술_내역머리렌더();
   시술_테이블렌더();
+
+  if (typeof 표_자동리사이즈적용 === 'function') {
+    표_자동리사이즈적용('procedure_history');
+  }
 }
 
 
 /* ================================================================
    테이블 렌더 (내역 화면)
    ================================================================ */
+
+/* 컬럼 하나의 셀 내용 (시술_컬럼 정의 기준) */
+function 시술_셀HTML(c, r, 취소됨) {
+
+  if (c.키 === '시술금액') {
+    return 시술_금액표시(r.시술금액);
+  }
+
+  if (c.키 === '패키지여부') {
+    return r.패키지여부 === 'Y' ? 'Y' : '';
+  }
+
+  if (c.키 === '상태') {
+    return 취소됨
+      ? '<span class="시술취소텍스트">취소</span>'
+      : 시술_escape(r.상태);
+  }
+
+  if (c.키 === '관리') {
+    return '<span class="시술링크" onclick="시술_수정폼열기(\'' + 시술_escape(r.시술ID) + '\')">수정</span>' +
+      (취소됨
+        ? '<span class="시술링크" onclick="시술_취소처리(\'' + 시술_escape(r.시술ID) + '\', false)">취소해제</span>'
+        : '<span class="시술링크" onclick="시술_취소처리(\'' + 시술_escape(r.시술ID) + '\', true)">취소</span>');
+  }
+
+  return 시술_escape(r[c.키]);
+}
+
 
 function 시술_테이블렌더() {
 
@@ -914,8 +1097,11 @@ function 시술_테이블렌더() {
     });
   }
 
+  const 컬럼들 = 시술_보이는컬럼();
+
   if (목록.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="17"><div class="시술안내">조회된 시술이 없습니다.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + 컬럼들.length +
+      '"><div class="시술안내">조회된 시술이 없습니다.</div></td></tr>';
     return;
   }
 
@@ -923,32 +1109,17 @@ function 시술_테이블렌더() {
 
     const 취소됨 = r.상태 === '취소';
 
-    return '<tr>' +
-      '<td>' + 시술_escape(r.시술일) + '</td>' +
-      '<td>' + 시술_escape(r.환자번호) + '</td>' +
-      '<td>' + 시술_escape(r.환자명) + '</td>' +
-      '<td>' + 시술_escape(r.시술구분) + '</td>' +
-      '<td>' + 시술_escape(r.내원경로) + '</td>' +
-      '<td title="' + 시술_escape(r.세부) + '">' + 시술_escape(r.세부) + '</td>' +
-      '<td>' + 시술_escape(r.방문유형) + '</td>' +
-      '<td title="' + 시술_escape(r.시술명) + '">' + 시술_escape(r.시술명) + '</td>' +
-      '<td title="' + 시술_escape(r.분류) + '">' + 시술_escape(r.분류) + '</td>' +
-      '<td class="우">' + 시술_escape(r.용량) + '</td>' +
-      '<td>' + 시술_escape(r.단위) + '</td>' +
-      '<td class="우">' + 시술_금액표시(r.시술금액) + '</td>' +
-      '<td>' + 시술_escape(r.담당원장) + '</td>' +
-      '<td>' + 시술_escape(r.담당실장) + '</td>' +
-      '<td>' + (r.패키지여부 === 'Y' ? 'Y' : '') + '</td>' +
-      '<td>' + (취소됨
-        ? '<span class="시술취소텍스트">취소</span>'
-        : 시술_escape(r.상태)) + '</td>' +
-      '<td>' +
-        '<span class="시술링크" onclick="시술_수정폼열기(\'' + 시술_escape(r.시술ID) + '\')">수정</span>' +
-        (취소됨
-          ? '<span class="시술링크" onclick="시술_취소처리(\'' + 시술_escape(r.시술ID) + '\', false)">취소해제</span>'
-          : '<span class="시술링크" onclick="시술_취소처리(\'' + 시술_escape(r.시술ID) + '\', true)">취소</span>') +
-      '</td>' +
-    '</tr>';
+    return '<tr>' + 컬럼들.map(function(c) {
+
+      const 내용 = 시술_셀HTML(c, r, 취소됨);
+
+      /* 잘릴 수 있는 텍스트 컬럼은 title 로 전체값을 보여준다 */
+      const title = (c.키 === '세부' || c.키 === '시술명' || c.키 === '분류')
+        ? ' title="' + 시술_escape(r[c.키]) + '"'
+        : '';
+
+      return '<td' + (c.우 ? ' class="우"' : '') + title + '>' + 내용 + '</td>';
+    }).join('') + '</tr>';
   }).join('');
 }
 
@@ -1129,80 +1300,10 @@ function 시술_취소처리(시술ID, 취소여부) {
 
     .PROC_취소(현재세션.token, 시술ID, !취소여부 ? false : true);
 }
-
-
-/* ================================================================
-   시술표 컬럼 리사이즈 (품목표와 동일 패턴)
-   ================================================================ */
-
-function 시술표_컬럼리사이즈초기화() {
-
-  const 표 = document.getElementById('시술표');
-
-  if (!표) {
-    return;
-  }
-
-  const cols = 표.querySelectorAll('colgroup col');
-  const ths = 표.querySelectorAll('thead th');
-
-  // 저장된 너비 불러오기
-  try {
-
-    const 저장 = JSON.parse(localStorage.getItem('시술표_컬럼너비_v3') || 'null');
-
-    if (Array.isArray(저장)) {
-      저장.forEach(function(w, i) {
-        if (w && cols[i]) {
-          cols[i].style.width = w + 'px';
-        }
-      });
-    }
-
-  } catch (e) { /* 무시 */ }
-
-  function 너비저장() {
-
-    const 값 = Array.prototype.map.call(cols, function(col) {
-      return parseInt(col.style.width, 10) || null;
-    });
-
-    try {
-      localStorage.setItem('시술표_컬럼너비_v3', JSON.stringify(값));
-    } catch (e) { /* 무시 */ }
-  }
-
-  ths.forEach(function(th, index) {
-
-    const 핸들 = th.querySelector('.리사이즈핸들');
-
-    if (!핸들) {
-      return;
-    }
-
-    핸들.addEventListener('mousedown', function(e) {
-
-      e.preventDefault();
-
-      const 시작X = e.clientX;
-      const 시작너비 = cols[index].offsetWidth || parseInt(cols[index].style.width, 10) || 100;
-
-      function 이동(ev) {
-        const 새너비 = Math.max(40, 시작너비 + (ev.clientX - 시작X));
-        cols[index].style.width = 새너비 + 'px';
-      }
-
-      function 종료() {
-        document.removeEventListener('mousemove', 이동);
-        document.removeEventListener('mouseup', 종료);
-        너비저장();
-      }
-
-      document.addEventListener('mousemove', 이동);
-      document.addEventListener('mouseup', 종료);
-    });
-  });
-}
+/* 시술표 전용 컬럼 리사이즈는 제거됨 (2026-08-20).
+   내역 표는 머리를 동적으로 그리므로 인덱스 기반 저장(시술표_컬럼너비_v3)이
+   컬럼 숨김·재정렬과 맞지 않는다. script_공통.html 의 표_자동리사이즈적용()
+   (data-key 기반, 3-3)이 대신 담당한다. */
 
 
 /* ================================================================

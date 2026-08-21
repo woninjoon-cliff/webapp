@@ -120,6 +120,56 @@
   color: #8b849d;
 }
 
+/* 컬럼 표시/숨김 칩 (백로그 ④) */
+.시술컬럼설정 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.시술컬럼설정라벨 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b849d;
+  margin-right: 2px;
+}
+
+.시술컬럼숨김수 {
+  color: #8064d8;
+  font-weight: 700;
+}
+
+.시술컬럼칩 {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border: 1px solid #e4dcfb;
+  border-radius: 20px;
+  background: #fff;
+  font-size: 12px;
+  color: #5d5673;
+  cursor: pointer;
+  user-select: none;
+}
+
+.시술컬럼칩:hover {
+  background: #faf8fe;
+  border-color: #cfc5e8;
+}
+
+.시술컬럼칩 input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.시술컬럼전체 {
+  font-size: 12px;
+  margin-left: 4px;
+}
+
 .시술표영역 {
   overflow-x: auto;
 }
