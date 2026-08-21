@@ -483,6 +483,65 @@ function 시술_옵션HTML(구분, 안내) {
 }
 
 
+/* ================================================================
+   시술명 datalist (타이핑 검색) — 2026-08-21 사용자 요청
+   select 를 input + datalist 로 바꿔도 목록 강제는 유지한다:
+   change/저장 시 아래 검사로 거르고, 서버가 최종 재검증한다
+   ================================================================ */
+
+/* 공유 datalist 를 확보하고 최신 기준목록으로 채운 뒤 id 를 돌려준다.
+   body 에 두므로 화면 전환(#콘텐츠 교체)에도 살아남는다 */
+function 시술_시술명목록확보() {
+
+  let dl = document.getElementById('시술_시술명공용목록');
+
+  if (!dl) {
+    dl = document.createElement('datalist');
+    dl.id = '시술_시술명공용목록';
+    document.body.appendChild(dl);
+  }
+
+  dl.innerHTML = (시술_기준목록['시술명'] || []).map(function(v) {
+    return '<option value="' + 시술_escape(v) + '">';
+  }).join('');
+
+  return dl.id;
+}
+
+
+/* input(datalist) 칸 목록 검사 — data-구분 목록에 없으면 오류 표시.
+   select 의 "(목록없음)" 옵션과 같은 역할이다 */
+function 시술_기준값검사(el) {
+
+  const v = String(el.value || '').trim();
+  const 목록 = 시술_기준목록[el.dataset.구분] || [];
+  const 없음 = v !== '' && 목록.indexOf(v) === -1;
+
+  el.classList.toggle('시술오류칸', 없음);
+
+  if (없음) {
+    el.dataset.목록없음 = '1';
+  } else {
+    delete el.dataset.목록없음;
+  }
+
+  return !없음;
+}
+
+
+/* select / input 공용: 현재 값이 "목록없음" 상태인가 (저장 차단 판정) */
+function 시술_목록없음값(el) {
+
+  if (el.tagName === 'INPUT') {
+    시술_기준값검사(el);
+    return el.dataset.목록없음 === '1';
+  }
+
+  const opt = el.options[el.selectedIndex];
+  return !!(opt && opt.dataset.목록없음);
+}
+
+
 /* 세부 옵션 HTML — 내원경로 종속 필터
    내원경로가 비어 있으면 전체 목록, 선택돼 있으면 해당 경로 허용 값만.
    경로 메타가 없는 세부 값은 항상 표시한다 */
@@ -523,6 +582,14 @@ function 시술_세부필터적용(세부sel, 내원경로) {
 function 시술_셀렉트값설정(sel, v) {
 
   v = String(v === null || v === undefined ? '' : v).trim();
+
+  /* 시술명 input(datalist) 칸 — 값을 넣고 목록 검사로 오류 표시 (2026-08-21).
+     붙여넣기·CSV·수정폼이 모두 이 함수를 거치므로 여기 한 곳이면 된다 */
+  if (sel.tagName === 'INPUT') {
+    sel.value = v;
+    시술_기준값검사(sel);
+    return;
+  }
 
   // 기존 임시 옵션 제거
   Array.prototype.slice.call(sel.querySelectorAll('option[data-목록없음]'))
@@ -916,7 +983,11 @@ function 시술_내역화면() {
 
         <div class="시술폼필드">
           <label>시술명 <span class="필수">*</span></label>
-          <select id="시술수정_시술명" onchange="시술_수정시술명변경()"></select>
+          <!-- input+datalist: 타이핑 검색 (2026-08-21). 목록 강제는 저장 검사·서버가 유지 -->
+          <input type="text" id="시술수정_시술명" list="시술수정_시술명목록"
+                 data-구분="시술명" autocomplete="off" placeholder="시술명 검색"
+                 onchange="시술_수정시술명변경()">
+          <datalist id="시술수정_시술명목록"></datalist>
         </div>
 
         <div class="시술폼필드">
@@ -1033,7 +1104,10 @@ function 시술_내역초기화() {
 
   시술_기준목록불러오기(function() {
     // 수정폼 드롭다운 채우기
-    document.getElementById('시술수정_시술명').innerHTML = 시술_옵션HTML('시술명', '시술명 선택');
+    document.getElementById('시술수정_시술명목록').innerHTML =
+      (시술_기준목록['시술명'] || []).map(function(v) {
+        return '<option value="' + 시술_escape(v) + '">';
+      }).join('');
     document.getElementById('시술수정_담당실장').innerHTML = 시술_옵션HTML('담당실장', '선택');
     document.getElementById('시술수정_담당원장').innerHTML = 시술_옵션HTML('담당원장', '선택');
     document.getElementById('시술수정_내원경로').innerHTML = 시술_옵션HTML('내원경로', '선택');
@@ -1715,7 +1789,10 @@ function 시술_수정내원경로변경() {
 /* 수정폼에서 시술명을 바꾸면 단위·분류를 매핑값으로 자동 갱신 */
 function 시술_수정시술명변경() {
 
-  const 시술명 = document.getElementById('시술수정_시술명').value;
+  const 입력 = document.getElementById('시술수정_시술명');
+  시술_기준값검사(입력);
+
+  const 시술명 = 입력.value;
   const 메타 = 시술_시술명메타[시술명];
 
   if (!메타) {
@@ -1742,8 +1819,7 @@ function 시술_수정저장() {
 
   for (let i = 0; i < 검사대상.length; i++) {
     const sel = 검사대상[i][1];
-    const opt = sel.options[sel.selectedIndex];
-    if (opt && opt.dataset.목록없음) {
+    if (시술_목록없음값(sel)) {
       alert(검사대상[i][0] + ' "' + sel.value + '"은(는) 기준정보 목록에 없습니다.\n관리 > 시술/실장/원장 관리에서 먼저 등록하거나 목록에서 선택해주세요.');
       return;
     }
@@ -1995,6 +2071,32 @@ function 시술_행추가() {
       el.innerHTML = 시술_차감권옵션HTML(구분0, '', '');
       el.disabled = (구분0 !== '멤버십' && 구분0 !== '다회차');
 
+    } else if (c === 4) {
+
+      /* 시술명(4)은 input + datalist — 타이핑 검색 (2026-08-21 사용자 요청).
+         목록 강제는 그대로다: change·저장 시 시술_기준값검사 / 시술_목록없음값이
+         거르고 서버가 재검증한다. 붙여넣기 값은 시술_셀렉트값설정의 INPUT 분기가 받는다 */
+      el = document.createElement('input');
+      el.type = 'text';
+      el.autocomplete = 'off';
+      el.dataset.구분 = '시술명';
+      el.setAttribute('list', 시술_시술명목록확보());
+      el.addEventListener('paste', 시술_붙여넣기처리);
+
+      el.addEventListener('change', function() {
+        시술_기준값검사(this);
+
+        // 시술명 선택 → 단위 자동 반영 (원가표 단위매핑과 동일, 이후 수정 가능)
+        const 메타 = 시술_시술명메타[this.value];
+        if (메타) {
+          시술_행셀들(this.closest('tr'))[6].value = 메타.단위;
+        }
+
+        // 다회차 차감권은 시술명 종속 — 시술명이 바뀌면 항상 다시 거른다
+        시술_행차감권갱신(this.closest('tr'));
+        시술_건수갱신();
+      });
+
     } else if (시술_셀형태[c]) {
 
       el = document.createElement('select');
@@ -2002,7 +2104,7 @@ function 시술_행추가() {
       // 세부(11)는 내원경로 종속 — 초기에는 전체 목록
       el.innerHTML = c === 11
         ? 시술_세부옵션HTML('')
-        : 시술_옵션HTML(시술_셀형태[c], c === 4 ? '시술명 선택' : '선택');
+        : 시술_옵션HTML(시술_셀형태[c], '선택');
 
       el.addEventListener('change', function() {
         // 목록에 있는 값으로 바꾸면 오류 표시 제거
@@ -2414,8 +2516,7 @@ function 시술_저장() {
 
     [2, 3, 4, 10, 11, 12].forEach(function(c) {
       const sel = 셀[c];
-      const opt = sel.options[sel.selectedIndex];
-      if (opt && opt.dataset.목록없음) {
+      if (시술_목록없음값(sel)) {
         오류들.push((i + 1) + '번 행: ' + 시술_입력열[c] + ' "' + sel.value +
           '"은(는) 기준정보 목록에 없습니다. 관리 > 시술/실장/원장 관리에서 먼저 등록해주세요.');
         목록오류 = true;

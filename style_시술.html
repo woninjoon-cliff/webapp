@@ -666,9 +666,12 @@
   outline-offset: -2px;
 }
 
-/* 기준정보 목록에 없는 값 (저장 차단 대상) */
+/* 기준정보 목록에 없는 값 (저장 차단 대상).
+   시술명이 input(datalist)으로 바뀌어 input 도 대상이다 (2026-08-21) */
 .시술입력표 select.시술오류칸,
-.시술수정폼 select.시술오류칸 {
+.시술수정폼 select.시술오류칸,
+.시술입력표 input.시술오류칸,
+.시술수정폼 input.시술오류칸 {
   color: #d92d20;
   font-weight: 600;
   background: #fef1f0;
