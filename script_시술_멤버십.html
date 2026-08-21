@@ -69,7 +69,7 @@ function 멤버십_화면() {
 
         <div class="필드">
           <label>결제액 <span class="필수">*</span></label>
-          <input type="text" id="멤버십_결제액" placeholder="예: 1000000"
+          <input type="text" class="금액칸" id="멤버십_결제액" placeholder="예: 1000000"
                  style="width:120px" onchange="멤버십_등급미리보기()">
         </div>
 
@@ -80,7 +80,7 @@ function 멤버십_화면() {
 
         <div class="필드">
           <label>보너스</label>
-          <input type="text" id="멤버십_보너스" placeholder="자동" style="width:110px">
+          <input type="text" class="금액칸" id="멤버십_보너스" placeholder="자동" style="width:110px">
         </div>
 
         <div class="필드">
@@ -339,9 +339,9 @@ function 멤버십_수정폼열기(멤버십ID) {
   document.getElementById('멤버십_환자번호').value = m.환자번호;
   document.getElementById('멤버십_환자명').value = m.환자명;
   document.getElementById('멤버십_등급').value = m.등급;
-  document.getElementById('멤버십_보너스').value = m.보너스;
+  document.getElementById('멤버십_보너스').value = 금액칸_표시(m.보너스);
   document.getElementById('멤버십_판매일').value = m.판매일;
-  document.getElementById('멤버십_결제액').value = m.결제액;
+  document.getElementById('멤버십_결제액').value = 금액칸_표시(m.결제액);
   document.getElementById('멤버십_유효기간').value = m.유효기간;
   document.getElementById('멤버십_비고').value = m.비고;
 
@@ -363,7 +363,7 @@ function 멤버십_수정폼열기(멤버십ID) {
    사용자가 직접 고친 값이 있으면 덮어쓰지 않는다 (예외 케이스 허용) */
 function 멤버십_등급미리보기() {
 
-  const 결제액 = document.getElementById('멤버십_결제액').value;
+  const 결제액 = 금액칸_값(document.getElementById('멤버십_결제액'));
 
   if (!결제액) {
     return;
@@ -382,7 +382,7 @@ function 멤버십_등급미리보기() {
 
       /* 비어 있을 때만 채운다 — 수동 입력값을 존중 */
       if (!등급el.value.trim()) { 등급el.value = r.등급; }
-      if (!보너스el.value.trim()) { 보너스el.value = r.보너스; }
+      if (!금액칸_값(보너스el)) { 보너스el.value = 금액칸_표시(r.보너스); }
 
       멤버십_상태표시(
         r.등급
@@ -407,9 +407,9 @@ function 멤버십_저장() {
     환자번호: document.getElementById('멤버십_환자번호').value.trim(),
     환자명: document.getElementById('멤버십_환자명').value.trim(),
     등급: document.getElementById('멤버십_등급').value.trim(),
-    보너스: document.getElementById('멤버십_보너스').value.trim(),
+    보너스: 금액칸_값(document.getElementById('멤버십_보너스')),
     판매일: document.getElementById('멤버십_판매일').value,
-    결제액: document.getElementById('멤버십_결제액').value,
+    결제액: 금액칸_값(document.getElementById('멤버십_결제액')),
     유효기간: document.getElementById('멤버십_유효기간').value,
     비고: document.getElementById('멤버십_비고').value.trim()
   };

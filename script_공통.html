@@ -521,6 +521,9 @@
        페이지렌더링은 분기마다 return 하므로 여기서 한 번에 처리한다 */
     표_자동리사이즈적용(page);
 
+    /* .금액칸 입력에 실시간 콤마 부착 (같은 이유로 여기서 한 번에) */
+    금액칸_자동적용();
+
   }
 
 
@@ -997,6 +1000,91 @@
       })
 
       .PROC_getSummary(현재세션.token);
+  }
+
+
+  /* ================================================================
+     공용: 금액 입력칸 자동 콤마 (2026-08-21)
+
+     금액을 적을 때 자릿수가 안 보여 얼마인지 읽기 힘들다는 사용자 지적.
+     **입력하는 동안 실시간으로** 콤마가 찍힌다 (blur 후가 아니라 타이핑 중).
+
+     쓰는 법: input 에 class="금액칸" 만 붙이면 된다.
+       <input type="text" class="금액칸" id="...">
+     페이지가 렌더될 때마다 금액칸_자동적용() 이 훑어 붙이므로
+     **새 화면에 금액 입력을 추가할 때 따로 배선할 필요가 없다.**
+
+     ★ 값을 읽을 때는 반드시 금액칸_값() 을 쓸 것.
+       화면에는 "1,000,000" 이 들어 있어서 그냥 읽으면 콤마가 섞인다.
+       (서버 PROC_금액정규화_ 가 콤마를 제거하긴 하지만, 프론트 계산에서 NaN 이 난다)
+     ================================================================ */
+
+  /* 콤마를 제거한 순수 숫자 문자열. 빈 값은 '' */
+  function 금액칸_값(el) {
+
+    if (!el) return '';
+
+    return String(el.value || '').replace(/,/g, '').trim();
+  }
+
+
+  /* 숫자에 콤마. 숫자가 아닌 문자는 버린다 */
+  function 금액칸_표시(문자열) {
+
+    const 숫자 = String(문자열 || '').replace(/[^\d]/g, '');
+
+    if (숫자 === '') return '';
+
+    return Number(숫자).toLocaleString('ko-KR');
+  }
+
+
+  function 금액칸_붙이기(el) {
+
+    if (!el || el.dataset.금액칸적용 === '1') {
+      return;
+    }
+
+    el.dataset.금액칸적용 = '1';
+
+    /* 처음 들어 있던 값(수정 폼 등)도 콤마를 찍어준다 */
+    if (el.value) {
+      el.value = 금액칸_표시(el.value);
+    }
+
+    el.addEventListener('input', function() {
+
+      /* 커서 위치 보존: 콤마를 다시 찍으면 문자열 길이가 바뀌므로
+         "커서 앞의 숫자 개수" 를 기준으로 되돌린다. 안 하면 커서가 맨 뒤로 튄다 */
+      const 이전커서 = this.selectionStart;
+      const 이전길이 = this.value.length;
+      const 앞숫자수 = this.value.slice(0, 이전커서).replace(/[^\d]/g, '').length;
+
+      this.value = 금액칸_표시(this.value);
+
+      if (앞숫자수 === 0) {
+        this.setSelectionRange(0, 0);
+      } else {
+        let 센것 = 0, 위치 = 0;
+        for (let i = 0; i < this.value.length; i++) {
+          if (/\d/.test(this.value[i])) 센것++;
+          if (센것 === 앞숫자수) { 위치 = i + 1; break; }
+        }
+        this.setSelectionRange(위치, 위치);
+      }
+    });
+  }
+
+
+  /* 콘텐츠 영역의 .금액칸 을 모두 훑어 붙인다.
+     페이지이동 때마다 호출되며, 이미 붙은 것은 건너뛴다 */
+  function 금액칸_자동적용() {
+
+    const content = document.getElementById('콘텐츠');
+
+    if (!content) return;
+
+    content.querySelectorAll('input.금액칸').forEach(금액칸_붙이기);
   }
 
 

@@ -853,7 +853,7 @@ function 시술_내역화면() {
 
         <div class="시술폼필드">
           <label>시술금액</label>
-          <input type="text" id="시술수정_시술금액">
+          <input type="text" class="금액칸" id="시술수정_시술금액">
         </div>
 
         <div class="시술폼필드">
@@ -1572,7 +1572,7 @@ function 시술_수정폼열기(시술ID) {
   document.getElementById('시술수정_시술일').value = r.시술일;
   document.getElementById('시술수정_용량').value = r.용량;
   document.getElementById('시술수정_단위').value = r.단위;
-  document.getElementById('시술수정_시술금액').value = r.시술금액;
+  document.getElementById('시술수정_시술금액').value = 금액칸_표시(r.시술금액);
   document.getElementById('시술수정_패키지여부').value = r.패키지여부 === 'Y' ? 'Y' : '';
   document.getElementById('시술수정_비고').value = r.비고;
 
@@ -1660,7 +1660,7 @@ function 시술_수정저장() {
     시술명: document.getElementById('시술수정_시술명').value,
     용량: document.getElementById('시술수정_용량').value.trim(),
     단위: document.getElementById('시술수정_단위').value.trim(),
-    시술금액: document.getElementById('시술수정_시술금액').value,
+    시술금액: 금액칸_값(document.getElementById('시술수정_시술금액')),
     패키지여부: document.getElementById('시술수정_패키지여부').value,
     담당원장: document.getElementById('시술수정_담당원장').value,
     담당실장: document.getElementById('시술수정_담당실장').value,
@@ -1927,6 +1927,14 @@ function 시술_행추가() {
       el.type = 'text';
       el.addEventListener('paste', 시술_붙여넣기처리);
       el.addEventListener('input', 시술_건수갱신);
+
+      // 시술금액(7)은 입력하는 동안 콤마가 찍히게 한다 (2026-08-21)
+      if (c === 7) {
+        el.className = '금액칸';
+        if (typeof 금액칸_붙이기 === 'function') {
+          금액칸_붙이기(el);
+        }
+      }
 
       // 환자번호(0)가 바뀌면 그 행의 멤버십 목록을 다시 채운다
       if (c === 0) {
@@ -2344,7 +2352,7 @@ function 시술_저장() {
       시술명: 시술명,
       용량: 셀[5].value.trim(),
       단위: 셀[6].value.trim(),
-      시술금액: 셀[7].value.trim(),
+      시술금액: 금액칸_값(셀[7]),
       비고: 셀[8].value.trim(),
       패키지여부: 셀[9].value,
       내원경로: 셀[10].value,
