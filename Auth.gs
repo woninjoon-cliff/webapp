@@ -113,6 +113,72 @@ function AUTH_hashPassword(password) {
 
 
 // =====================================================================
+// 세션 저장소 (캐시 + Properties 이중화)
+//
+// ★ CacheService 단독이었다가 2026-08-21 이중화했다.
+//   캐시가 put 을 받고도 get 이 즉시 null 을 반환하는 장애가 실제로 발생해
+//   (편집기에서 test_BASE_전체흐름 직접 실행으로 재현·확인)
+//   로그인 직후 모든 토큰 호출이 "세션 만료" 로 죽었다.
+//   CacheService 는 원래 보존을 보장하지 않는 서비스다.
+//
+// 구조:
+//   쓰기 = 캐시 + ScriptProperties 둘 다 (한쪽이 실패해도 로그인은 진행)
+//   읽기 = 캐시 먼저 → 없으면 Properties 폴백 (캐시가 살아 있으면 지금과 동일)
+//   만료 = createdAt 으로 자체 검사 (Properties 에는 TTL 이 없다)
+//   정리 = 만료된 Properties 세션은 로그인 시점에 몰아서 삭제
+// =====================================================================
+
+var AUTH_세션유효초 = 21600;   // 6시간
+
+
+function AUTH_세션키_(token) {
+  return 'SESSION_' + token;
+}
+
+
+function AUTH_세션만료됨_(session) {
+
+  const 경과초 =
+    (new Date().getTime() - Number(session && session.createdAt || 0)) / 1000;
+
+  // createdAt 이 없거나 이상하면 만료로 취급한다 (재로그인 유도)
+  return !(경과초 >= 0 && 경과초 < AUTH_세션유효초);
+}
+
+
+// 만료된 세션 Properties 정리. 로그인은 드물어서 이 시점에 몰아 해도 부담 없다
+function AUTH_만료세션정리_() {
+
+  try {
+
+    const props = PropertiesService.getScriptProperties();
+
+    props.getKeys().forEach(function(key) {
+
+      if (key.indexOf('SESSION_') !== 0) {
+        return;
+      }
+
+      let session = null;
+
+      try {
+        session = JSON.parse(props.getProperty(key));
+      } catch (e) {
+        session = null;
+      }
+
+      if (!session || AUTH_세션만료됨_(session)) {
+        props.deleteProperty(key);
+      }
+    });
+
+  } catch (e) {
+    // 정리는 부가 기능 — 실패해도 로그인은 진행한다
+  }
+}
+
+
+// =====================================================================
 // 세션 생성
 // =====================================================================
 
@@ -129,13 +195,22 @@ function AUTH_createSession(user) {
     createdAt: new Date().getTime()
   };
 
-  CacheService
-    .getScriptCache()
-    .put(
-      'SESSION_' + token,
-      JSON.stringify(session),
-      21600
-    );
+  const key = AUTH_세션키_(token);
+  const value = JSON.stringify(session);
+
+  try {
+    CacheService.getScriptCache().put(key, value, AUTH_세션유효초);
+  } catch (e) {
+    // 무시 — Properties 폴백이 있다
+  }
+
+  try {
+    PropertiesService.getScriptProperties().setProperty(key, value);
+  } catch (e) {
+    // 무시 — 캐시가 살아 있으면 동작한다
+  }
+
+  AUTH_만료세션정리_();
 
   return token;
 }
@@ -151,15 +226,47 @@ function AUTH_getSession(token) {
     return null;
   }
 
-  const value = CacheService
-    .getScriptCache()
-    .get('SESSION_' + token);
+  const key = AUTH_세션키_(token);
+
+  let value = null;
+  let 캐시적중 = false;
+
+  try {
+    value = CacheService.getScriptCache().get(key);
+    캐시적중 = !!value;
+  } catch (e) {
+    value = null;
+  }
+
+  if (!value) {
+    try {
+      value = PropertiesService.getScriptProperties().getProperty(key);
+    } catch (e) {
+      value = null;
+    }
+  }
 
   if (!value) {
     return null;
   }
 
-  return JSON.parse(value);
+  const session = JSON.parse(value);
+
+  if (AUTH_세션만료됨_(session)) {
+    AUTH_logout(token);
+    return null;
+  }
+
+  // Properties 에서 읽었으면 캐시를 다시 데워 둔다 (캐시 복구 후에는 캐시로 응답)
+  if (!캐시적중) {
+    try {
+      CacheService.getScriptCache().put(key, value, AUTH_세션유효초);
+    } catch (e) {
+      // 무시
+    }
+  }
+
+  return session;
 }
 
 
@@ -173,9 +280,19 @@ function AUTH_logout(token) {
     return true;
   }
 
-  CacheService
-    .getScriptCache()
-    .remove('SESSION_' + token);
+  const key = AUTH_세션키_(token);
+
+  try {
+    CacheService.getScriptCache().remove(key);
+  } catch (e) {
+    // 무시
+  }
+
+  try {
+    PropertiesService.getScriptProperties().deleteProperty(key);
+  } catch (e) {
+    // 무시
+  }
 
   return true;
 }
