@@ -301,18 +301,9 @@
   overflow-y: auto;
 }
 
-/* ★ 선택자에 .시술표 를 반드시 포함할 것 (특정도 0-2-2).
-   아래 `.시술표 thead th` 가 리사이즈 핸들용으로 position: relative 를 지정하는데,
-   `.시술금일영역 thead th` 만 쓰면 특정도가 0-1-2 로 같아서 뒤에 오는 relative 가
-   sticky 를 덮어쓴다 (2026-08-20 실제 발생 — 헤더가 고정되지 않던 원인) */
-.시술금일영역 .시술표 thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  /* 스크롤된 본문이 헤더 밑으로 지나갈 때 경계선. border 대신 inset shadow 를 쓰면
-     레이아웃(열 너비 계산)에 영향을 주지 않는다 */
-  box-shadow: inset 0 -1px 0 #ddd5f0;
-}
+/* 헤더 고정(sticky thead)은 style_공통.html 의 `table.목록표 thead th` 가
+   전 표 공통으로 처리한다. 여기서는 스크롤 높이(max-height)만 지정한다.
+   특정도 함정은 그 공통 규칙의 주석 참조 */
 
 /* border-collapse: collapse 는 sticky thead와 충돌한다 (테두리 소유가 table로 넘어가
    셀이 스크롤에 고정되지 않음). 테두리를 전부 셀이 갖고 있어 separate 로 바꿔도 외형은 동일하다.
